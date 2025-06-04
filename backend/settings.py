@@ -33,7 +33,7 @@ DEBUG = True
 
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1','backend-compatips.onrender.com']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','backend-compatips.onrender.com', 'frontend-compatips-x8tl.vercel.app']
 
 CORS_ALLOW_ALL_ORIGINS = True
 
