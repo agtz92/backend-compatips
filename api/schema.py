@@ -14,14 +14,15 @@ class Query:
 
     @strawberry.field
     def productos(self) -> List[ProductoOfertaType]:
-        return ProductoOferta.objects.all()
+        return ProductoOferta.objects.order_by('-fecha')
+
 
     @strawberry.field
     def productos_filtrados(
         self,
         categoria: Optional[str] = None,
         search: Optional[str] = None,
-        ordenar_por: Optional[str] = None  # e.g., "precio_oferta", "-fecha"
+        ordenar_por: Optional[str] = None
     ) -> List[ProductoOfertaType]:
         queryset = ProductoOferta.objects.all()
 
@@ -33,8 +34,11 @@ class Query:
 
         if ordenar_por:
             queryset = queryset.order_by(ordenar_por)
+        else:
+            queryset = queryset.order_by('-fecha')
 
         return queryset
+
 
     @strawberry.field
     def producto_por_id(self, id: strawberry.ID) -> ProductoOfertaType:
