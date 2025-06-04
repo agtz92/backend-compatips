@@ -33,7 +33,7 @@ DEBUG = True
 
 
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1','backend-compatips.onrender.com']
 
 CORS_ALLOW_ALL_ORIGINS = True
 
