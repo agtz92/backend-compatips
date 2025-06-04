@@ -31,7 +31,7 @@ SECRET_KEY = 'django-insecure-$@trk&b81fwz$)h*xpb%_q2^dzo)(i_%r(do5i%0z*%%2f#=0)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-
+WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1','backend-compatips.onrender.com', 'frontend-compatips-x8tl.vercel.app']
 

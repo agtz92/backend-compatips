@@ -39,6 +39,11 @@ class Query:
     @strawberry.field
     def producto_por_id(self, id: strawberry.ID) -> ProductoOfertaType:
         return ProductoOferta.objects.get(pk=id)
+    
+    @strawberry.field
+    def categorias_unicas(self) -> List[str]:
+        return ProductoOferta.objects.order_by().values_list('categoria', flat=True).distinct()
+
 
 
 # ✅ MUTATIONS
