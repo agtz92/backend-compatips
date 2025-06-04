@@ -11,27 +11,39 @@ def health_check(request):
 
 @csrf_exempt
 def recibir_webhook(request):
-    if request.method != 'POST':
+    if request.method != "POST":
         return HttpResponseBadRequest("Método no permitido")
-    
-    # Validar token en headers
-    token = request.headers.get("X-Webhook-Token")
-    if token != settings.WEBHOOK_SECRET:
-        return JsonResponse({"error": "Token inválido"}, status=403)
 
     try:
-        data = json.loads(request.body)
+        print("RAW BODY:", request.body.decode("utf-8"))
+        body = json.loads(request.body)
+
+        activity = body.get("data", {}).get("activity", [])
+        if not activity:
+            raise ValueError("No hay actividad en el webhook")
+
+        input_data = activity[0].get("input_data", {})
+
+        fecha_str = input_data.get("fecha_hoy")
+        if not fecha_str:
+            raise ValueError("fecha_hoy no fue proporcionada")
+
+        fecha = datetime.strptime(fecha_str, "%d-%m-%Y").date()
 
         producto = ProductoOferta.objects.create(
-            titulo=data['titulo'],
-            precio_original=Decimal(str(data['precio_original'])),
-            descuento=Decimal(str(data['descuento'])),
-            precio_oferta=Decimal(str(data['precio_oferta'])),
-            url_imagen=data['url_imagen'],
-            link_referidos=data['link_referidos'],
-            fecha=datetime.strptime(data['fecha'], "%d-%m-%Y").date(),
-            categoria=data['categoria']
+            titulo="Producto desde webhook",
+            precio_original=Decimal("100.00"),
+            descuento=Decimal("10.00"),
+            precio_oferta=Decimal("90.00"),
+            url_imagen="https://example.com/default.jpg",
+            link_referidos="https://amazon.com/default",
+            fecha=fecha,
+            categoria="Automático"
         )
+
         return JsonResponse({"status": "ok", "id": producto.id})
+
     except Exception as e:
-        return JsonResponse({"error": str(e)}, status=400)
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"error": str(e)}, status=500)
