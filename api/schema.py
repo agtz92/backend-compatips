@@ -91,10 +91,10 @@ class Mutation:
         try:
             webhook_url = "https://botize.com/webhook/agtz92@2ea6e9221b445044c5c5d91de7227b97ae51e5b2c9bf1fd88056b9aaff8af976/24"
             payload = {
-                "titulo": producto.titulo,
-                "imagen": producto.url_imagen,
-                "precio original": str(producto.precio_original),
-                "precio descuento": str(producto.precio_oferta),
+                "title": producto.titulo,
+                "img": producto.url_imagen,
+                "originalprice": str(producto.precio_original),
+                "discountprice": str(producto.precio_oferta),
                 "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
             }
             logger.info("📦 JSON enviado a Botize:\n%s", json.dumps(payload, indent=2, ensure_ascii=False))
