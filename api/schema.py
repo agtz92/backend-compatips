@@ -95,7 +95,7 @@ class Mutation:
                 "img": producto.url_imagen,
                 "originalprice": str(producto.precio_original),
                 "discountprice": str(producto.precio_oferta),
-                "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
+                "url": f"https://www.compatips.com/producto/{producto.id}"
             }
             logger.info("📦 JSON enviado a Botize:\n%s", json.dumps(payload, indent=2, ensure_ascii=False))
             response = requests.post(webhook_url, json=payload)

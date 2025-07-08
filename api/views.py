@@ -39,7 +39,7 @@ def recibir_webhook(request):
                 "img": producto.url_imagen,
                 "originalprice": str(producto.precio_original),
                 "discountprice": str(producto.precio_oferta) if producto.precio_oferta else "",
-                "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
+                "url": f"https://www.compatips.com/producto/{producto.id}"
             }
 
             print("📦 Payload a enviar a Botize:")
