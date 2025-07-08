@@ -3,7 +3,7 @@ from typing import List, Optional
 from .models import Post, ProductoOferta
 from .types import PostType, ProductoOfertaType
 from django.db.models import Q
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import requests, json
 import logging
 
@@ -28,7 +28,8 @@ class Query:
         search: Optional[str] = None,
         ordenar_por: Optional[str] = None
     ) -> List[ProductoOfertaType]:
-        queryset = ProductoOferta.objects.all()
+        limite = date.today() - timedelta(weeks=2)
+        queryset = ProductoOferta.objects.filter(fecha__gte=limite)
 
         if categoria:
             queryset = queryset.filter(categoria__iexact=categoria)
