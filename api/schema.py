@@ -94,7 +94,8 @@ class Mutation:
                 "precio descuento": str(producto.precio_oferta),
                 "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
             }
-            json.dumps(payload)
+            print("🔔 JSON a enviar a Botize:")
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
             response = requests.post(webhook_url, json=payload)
             response.raise_for_status()
         except requests.RequestException as e:
