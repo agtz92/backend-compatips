@@ -5,6 +5,9 @@ from .types import PostType, ProductoOfertaType
 from django.db.models import Q
 from datetime import datetime
 import requests, json
+import logging
+
+logger = logging.getLogger(__name__)
 
 # ✅ QUERIES
 @strawberry.type
@@ -94,8 +97,7 @@ class Mutation:
                 "precio descuento": str(producto.precio_oferta),
                 "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
             }
-            print("🔔 JSON a enviar a Botize:")
-            print(json.dumps(payload, indent=2, ensure_ascii=False))
+            logger.info("📦 JSON enviado a Botize:\n%s", json.dumps(payload, indent=2, ensure_ascii=False))
             response = requests.post(webhook_url, json=payload)
             response.raise_for_status()
         except requests.RequestException as e:
