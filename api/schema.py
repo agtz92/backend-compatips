@@ -4,7 +4,7 @@ from .models import Post, ProductoOferta
 from .types import PostType, ProductoOfertaType
 from django.db.models import Q
 from datetime import datetime
-import requests
+import requests, json
 
 # ✅ QUERIES
 @strawberry.type
@@ -94,6 +94,7 @@ class Mutation:
                 "precio descuento": str(producto.precio_oferta),
                 "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
             }
+            json.dumps(payload)
             response = requests.post(webhook_url, json=payload)
             response.raise_for_status()
         except requests.RequestException as e:
