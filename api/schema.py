@@ -4,6 +4,7 @@ from .models import Post, ProductoOferta
 from .types import PostType, ProductoOfertaType
 from django.db.models import Q
 from datetime import datetime
+import requests
 
 # ✅ QUERIES
 @strawberry.type
@@ -71,6 +72,7 @@ class Mutation:
         precio_oferta: float = None
     ) -> ProductoOfertaType:
         fecha_parsed = datetime.strptime(fecha, "%d-%m-%Y").date()
+
         producto = ProductoOferta.objects.create(
             titulo=titulo,
             precio_original=precio_original,
@@ -81,6 +83,22 @@ class Mutation:
             fecha=fecha_parsed,
             categoria=categoria
         )
+
+        # 👉 Enviar POST al webhook de Botize
+        try:
+            webhook_url = "https://botize.com/webhook/agtz92@2ea6e9221b445044c5c5d91de7227b97ae51e5b2c9bf1fd88056b9aaff8af976/24"
+            payload = {
+                "title": producto.titulo,
+                "img": producto.url_imagen,
+                "originalprice": str(producto.precio_original),
+                "discountprice": str(producto.precio_oferta),
+                "url": f"https://frontend-compatips-x8tl.vercel.app/producto/{producto.id}"
+            }
+            response = requests.post(webhook_url, json=payload)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            print(f"❌ Error al enviar webhook: {e}")
+
         return producto
 
 
