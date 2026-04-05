@@ -18,8 +18,11 @@ class Query:
         return Post.objects.all()[offset:offset + limit]
 
     @strawberry.field
-    def productos(self, limit: int = 20, offset: int = 0) -> List[ProductoOfertaType]:
-        return ProductoOferta.objects.order_by('-fecha')[offset:offset + limit]
+    def productos(self, limit: Optional[int] = None, offset: int = 0) -> List[ProductoOfertaType]:
+        queryset = ProductoOferta.objects.order_by('-fecha')
+        if limit is not None:
+            return queryset[offset:offset + limit]
+        return queryset[offset:]
 
 
     @strawberry.field
