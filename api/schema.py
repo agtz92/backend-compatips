@@ -27,7 +27,9 @@ class Query:
         self,
         categoria: Optional[str] = None,
         search: Optional[str] = None,
-        ordenar_por: Optional[str] = None
+        ordenar_por: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0
     ) -> List[ProductoOfertaType]:
         limite = date.today() - timedelta(weeks=2)
         queryset = ProductoOferta.objects.filter(fecha__gte=limite)
@@ -43,7 +45,7 @@ class Query:
         else:
             queryset = queryset.order_by('-fecha')
 
-        return queryset
+        return queryset[offset:offset + limit]
 
 
     @strawberry.field
