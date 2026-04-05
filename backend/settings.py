@@ -38,9 +38,14 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'backend-compatips.onrender.com', 'fr
 CORS_ALLOWED_ORIGINS = [
     'https://frontend-compatips.vercel.app',
     'https://www.compatips.com',
+    'http://localhost:3000',
 ]
 
-CSRF_TRUSTED_ORIGINS = ['http://localhost:3000']
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:3000',
+    'https://frontend-compatips.vercel.app',
+    'https://www.compatips.com',
+]
 
 # Application definition
 
