@@ -3,6 +3,7 @@ from typing import List, Optional
 from .models import Post, ProductoOferta
 from .types import PostType, ProductoOfertaType
 from django.db.models import Q
+from django.core.cache import cache
 from datetime import datetime, date, timedelta
 import requests, json
 import logging
@@ -13,12 +14,12 @@ logger = logging.getLogger(__name__)
 @strawberry.type
 class Query:
     @strawberry.field
-    def posts(self) -> List[PostType]:
-        return Post.objects.all()
+    def posts(self, limit: int = 20, offset: int = 0) -> List[PostType]:
+        return Post.objects.all()[offset:offset + limit]
 
     @strawberry.field
-    def productos(self) -> List[ProductoOfertaType]:
-        return ProductoOferta.objects.order_by('-fecha')
+    def productos(self, limit: int = 20, offset: int = 0) -> List[ProductoOfertaType]:
+        return ProductoOferta.objects.order_by('-fecha')[offset:offset + limit]
 
 
     @strawberry.field
@@ -51,7 +52,16 @@ class Query:
     
     @strawberry.field
     def categorias_unicas(self) -> List[str]:
-        return ProductoOferta.objects.order_by().values_list('categoria', flat=True).distinct()
+        cache_key = 'categorias_unicas'
+        categorias = cache.get(cache_key)
+        if categorias is None:
+            categorias = list(
+                ProductoOferta.objects.order_by()
+                .values_list('categoria', flat=True)
+                .distinct()
+            )
+            cache.set(cache_key, categorias, timeout=600)  # 10 minutes
+        return categorias
 
 
 
@@ -87,6 +97,9 @@ class Mutation:
             fecha=fecha_parsed,
             categoria=categoria
         )
+
+        # Invalidate categories cache on new product
+        cache.delete('categorias_unicas')
 
         # 👉 Enviar POST al webhook de Botize
         try:
