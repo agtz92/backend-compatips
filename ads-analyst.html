@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ads Analyst — MatMarkt & Cortina Hawaiana</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #1e1e1e;
+    --border-bright: #2e2e2e;
+    --text: #e8e8e8;
+    --muted: #666;
+    --accent: #00d4aa;
+    --accent-dim: rgba(0,212,170,0.1);
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --matmarkt: #378ADD;
+    --cortina: #00d4aa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+  }
+
+  .accounts {
+    display: flex;
+    gap: 8px;
+  }
+
+  .account-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid;
+  }
+
+  .badge-matmarkt {
+    color: var(--matmarkt);
+    border-color: rgba(55,138,221,0.3);
+    background: rgba(55,138,221,0.08);
+  }
+
+  .badge-cortina {
+    color: var(--cortina);
+    border-color: rgba(0,212,170,0.3);
+    background: rgba(0,212,170,0.08);
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  .account-selector {
+    display: flex;
+    gap: 8px;
+    padding: 20px 0 0;
+  }
+
+  .acc-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: 1px solid var(--border-bright);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .acc-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .acc-btn.active-mm { border-color: var(--matmarkt); color: var(--matmarkt); background: rgba(55,138,221,0.08); }
+  .acc-btn.active-ch { border-color: var(--cortina); color: var(--cortina); background: rgba(0,212,170,0.08); }
+
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 300px;
+    max-height: 55vh;
+  }
+
+  .msg {
+    display: flex;
+    gap: 12px;
+    animation: fadeIn 0.2s ease;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .msg-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .msg-user .msg-icon { background: var(--border-bright); color: var(--muted); }
+  .msg-claude .msg-icon { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,212,170,0.2); }
+
+  .msg-body { flex: 1; }
+
+  .msg-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 4px;
+    letter-spacing: 0.06em;
+  }
+
+  .msg-text {
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .msg-claude .msg-text { color: #d4d4d4; }
+
+  .msg-text strong { color: var(--accent); font-weight: 500; }
+  .msg-text .flag-warn { color: var(--warn); }
+  .msg-text .flag-danger { color: var(--danger); }
+  .msg-text .flag-ok { color: #4ade80; }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 4px 0;
+  }
+
+  .input-area {
+    border-top: 1px solid var(--border);
+    padding: 16px 0 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border-bright);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    resize: none;
+    min-height: 80px;
+    max-height: 240px;
+    transition: border-color 0.15s;
+    outline: none;
+  }
+
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  .send-btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 10px 18px;
+    cursor: pointer;
+    height: 40px;
+    white-space: nowrap;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+
+  .send-btn:hover { opacity: 0.85; }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .quick-btns {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .quick-btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 3px;
+    border: 1px solid var(--border-bright);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .quick-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+
+  .thinking {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    padding: 4px 0;
+  }
+
+  .dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.2s infinite;
+  }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes pulse {
+    0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+    40% { opacity: 1; transform: scale(1); }
+  }
+
+  .status-bar {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    padding: 6px 0 0;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-right: 5px; }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">▸ ADS ANALYST</div>
+  <div class="accounts">
+    <span class="account-badge badge-matmarkt">MatMarkt 932-342-9199</span>
+    <span class="account-badge badge-cortina">Cortina Hawaiana 224-845-1770</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <div class="account-selector">
+    <button class="acc-btn active-mm" id="btn-mm" onclick="setAccount('matmarkt')">MatMarkt</button>
+    <button class="acc-btn" id="btn-ch" onclick="setAccount('cortina')">Cortina Hawaiana</button>
+    <button class="acc-btn" id="btn-both" onclick="setAccount('both')">Ambas</button>
+  </div>
+
+  <div class="chat-area" id="chat"></div>
+
+  <div class="input-area">
+    <div class="quick-btns">
+      <button class="quick-btn" onclick="quickPrompt('weekly')">Pegar reporte semanal</button>
+      <button class="quick-btn" onclick="quickPrompt('flags')">¿Hay alertas esta semana?</button>
+      <button class="quick-btn" onclick="quickPrompt('vs')">Comparar vs semana anterior</button>
+      <button class="quick-btn" onclick="quickPrompt('next')">¿Qué optimizo hoy?</button>
+    </div>
+    <div class="input-row">
+      <textarea id="input" placeholder="Pega el reporte aquí, o escribe una pregunta sobre las campañas…" onkeydown="handleKey(event)"></textarea>
+      <button class="send-btn" id="send-btn" onclick="send()">Enviar ↵</button>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span><span class="status-dot"></span>Claude Sonnet 4 · contexto de cuenta cargado</span>
+    <span id="status-right">listo</span>
+  </div>
+
+</div>
+
+<script>
+var currentAccount = 'matmarkt';
+var history = [];
+
+var SYSTEM = {
+  matmarkt: `Eres el analista de Google Ads de MatMarkt (cuenta 932-342-9199). Conoces esta cuenta en detalle porque llevamos horas trabajando juntos.
+
+CONTEXTO DE LA CUENTA:
+MatMarkt vende pisos y tapetes industriales de hule en México. Producto principal: pisos de hule para gimnasio, tapete en rollo, tatami para artes marciales, tapetes antiderrapantes para albercas y exteriores.
+
+CAMPAÑAS ACTIVAS (estado post-optimización del 6 de abril 2026):
+1. Piso Para Gimnasio Oferta Manual (ID: 20803238776) — MANUAL_CPC $600/día
+   - Reestructurada hoy en 3 ad groups: A (piso caucho/rollo), B (loseta/interlock), C (CrossFit/pesas)
+   - Bid "piso para gimnasio" bajado de $57 → $35
+   - 22 negativos añadidos a nivel campaña
+   - Baseline: 54 conv / $474 costo/conv (queremos bajar a <$200)
+   - Keyword principal: "piso para gimnasio" QS:7, 21% imp share, LP:AVERAGE
+
+2. Tapete en Rollo (ID: 23078541503) — MAXIMIZE_CONVERSIONS $400/día
+   - MEJOR CAMPAÑA: $118/conv, 103 conv, 11% CTR
+   - 13 negativos añadidos hoy, 7 exact match keywords añadidos
+   - Keyword problema: "hule pasillo" [BROAD] QS:2, LP:BELOW_AVERAGE — mayor spender
+   - Monitorear: si imp share de nuevos exact match sube, "hule pasillo" debe bajar en spend
+
+3. Tatami (ID: 1904732871) — MAXIMIZE_CONVERSIONS $300/día
+   - $118/conv, 10 conv, 8.9% CTR
+   - Landing page corregida hoy: /tGD/tGD2.html → /prods/tatami-artes-marciales
+   - LP era BELOW_AVERAGE en casi todos los keywords — esperar mejora de QS en 1-2 semanas
+   - 16 negativos añadidos, 8 exact match añadidos, 5 keywords QS:1 pausados
+   - Keyword principal: "Tatami" [BROAD] QS:2 — monitorear
+
+4. Tapete Alberca (ID: 23676069509) — MAXIMIZE_CONVERSIONS $76/día
+   - $69/conv (17 conv tracking), solo 3 leads calificados reales
+   - Todos los keywords en BROAD — problema de intención de búsqueda
+   - 24 negativos añadidos hoy, 7 exact match añadidos
+   - "pisos antiderrapantes para exteriores" [BROAD] pausado — 0 conv $183 gastado
+   - WhatsApp pre-fill pendiente en Webflow
+
+CAMPAÑAS PAUSADAS:
+- Piso Para Gimnasio Oferta Manual Manual Bid Strategy (ID: 22134588233) — pausada hoy, tenía $109 bid en "piso para gimnasio en rollo"
+- Campaña Display Gimnasio (ID: 13796743093) — pausada, $1,196 gastado 0 conv
+- Campaña Fin de Semana, Tapetes Antifatiga, Pisos Area Infantil, Piso para gimnasio (old) — todas pausadas
+
+PROBLEMAS PENDIENTES:
+- Conversion Rate muestra 0.00% en todas las campañas — bug de tracking probable (GA4 import issue)
+- WhatsApp pre-fill en landing page Tapete Alberca pendiente
+- Ad groups B y C de la campaña gimnasio son nuevos — sin datos aún, normal
+
+BENCHMARKS:
+- Tapete en Rollo: $118/conv ✓ objetivo mantener <$120
+- Tatami: $118/conv ✓ objetivo mantener <$120
+- Gym floor: $474/conv ✗ objetivo bajar a <$200
+- Alberca: $69/conv tracking / 3 leads reales ✗ objetivo subir leads calificados
+
+Responde en español, de forma conversacional. Cuando el usuario pegue un reporte, analiza qué mejoró, qué empeoró, y qué acción concreta recomiendas. Sé directo y específico. Si ves alertas críticas, márcalas claramente.`,
+
+  cortina: `Eres el analista de Google Ads y Webflow de Cortina Hawaiana / Hulempak SA de CV (cuenta Google Ads: 224-845-1770, Webflow site ID: 5d2bd8b0187e93aa2cc441ac).
+
+CONTEXTO DE LA CUENTA:
+Cortina Hawaiana vende cortinas industriales de PVC, rollos de PVC, cortinas para cuartos fríos, y topes para muelle. Mercado B2B industrial en México. ~125 leads calificados/mes (tracking externo, no en Google Ads todavía).
+
+SITUACIÓN AL INICIO (antes de optimización):
+- 1 campaña: Cortinas Hawaianas — TARGET_SPEND (Maximize Clicks), ~$1,100 MXN/día
+- Conversiones: 0 registradas (tracking roto/ausente)
+- CTR: 12.34% — buena señal
+- Problema principal: todos los keywords en un solo ad group → QS bajos en toda la cuenta
+
+KEYWORDS CON QS BAJO IDENTIFICADOS:
+- PVC Transparente: QS 1 — crítico
+- cortinas pvc, Cortina PVC, cortinas de pvc: QS 3
+- rollo PVC, rollo de pvc: QS 3
+- cortinas para cuartos frios, cortinas de refrigeracion: QS 3
+
+TRABAJO COMPLETADO EN SESIÓN ANTERIOR:
+1. Ad Group "Rollo de PVC" creado con landing page corthw.com/rollos-de-pvc
+   - Keywords: [rollo PVC], [rollo de pvc], "rollo PVC", "rollo de pvc", [PVC Transparente], "PVC Transparente"
+   - Keywords a remover del ad group principal: "PVC Transparente" ($2,696 MXN gastado), rollols de cortina hawaiana
+   - Ad copy: 15 headlines + 4 descripciones escritas
+
+2. Ad Group "Cortinas Cuartos Fríos" — copy escrito, NO creado aún en Google Ads
+   - Landing page: corthw.com/productos/cortina-hawaiana-polar-lisa
+   - Keywords: "cortinas para cuartos frios", [cortinas para cuartos frios], "cortina cuarto frio", etc.
+
+3. Webflow — cambios en designer (pendientes de publish):
+   - Nueva página: corthw.com/rollos-de-pvc (ID: 69d3d5d291dc67f016ccb42a)
+   - Página actualizada: corthw.com/distribuidores-y-comercializadoras (ID: 69a7814b7bf3eebf2531b64b)
+   - SEO actualizado en página de productos y CMS Polar Lisa (ya publicado)
+
+PENDIENTE URGENTE:
+1. Publicar Webflow (rollos-de-pvc y comercializadoras en draft)
+2. Completar conversion tracking: crear acción en Google Ads → GTM tag en .w-form-done → verificar
+3. Crear ad group "Cortinas Cuartos Fríos" en Google Ads con el copy ya escrito
+4. Remover keywords del ad group principal que ya tienen su propio ad group
+5. Crear ad groups pendientes: "Cortinas PVC Genérico" y "Cortina Hawaiana (brand)"
+6. Revisar banner de negative keywords conflictivos en UI
+7. Pausar Grupo de Anuncios Dinámico ($12,003 MXN gastado, 0 conv) hasta tener tracking
+8. Pausar keywords de baja calidad: "plastico para cortinas", "Hule PVC", "cortinas de plastico en tiras", etc.
+
+CUANDO HAYA CONVERSIONES (30-50):
+- Cambiar bidding de TARGET_SPEND a Maximize Conversions o Target CPA
+
+IDs CLAVE:
+- Campaign: Cortinas Hawaianas (ID: 1503969492)
+- Webflow site: 5d2bd8b0187e93aa2cc441ac
+
+Responde en español, conversacionalmente. Cuando el usuario pegue reportes o mencione cambios, analiza en contexto de lo que ya sabemos. Sé directo con recomendaciones.`,
+
+  both: `Eres el analista de Google Ads de dos cuentas: MatMarkt (932-342-9199) y Cortina Hawaiana (224-845-1770). Conoces ambas cuentas en detalle.
+
+MATMARKT — pisos y tapetes industriales de hule para gimnasios, pasillos, albercas, artes marciales.
+Campañas activas: Piso Para Gimnasio Oferta Manual, Tapete en Rollo, Tatami, Tapete Alberca.
+Mejor performer: Tapete en Rollo ($118/conv). Mayor problema: Gym floor ($474/conv, bid bajado de $57→$35 hoy).
+Cambios del 6 abril: ghost campaign pausada, bid bajado, 3 ad groups creados, negativos masivos añadidos en todas las campañas, landing page Tatami corregida.
+
+CORTINA HAWAIANA — cortinas industriales PVC, rollos PVC, cuartos fríos. B2B industrial. ~125 leads/mes externos.
+Estado: 1 campaña, tracking roto (0 conv registradas), reestructuración en proceso.
+Pendiente urgente: publicar Webflow, setup conversion tracking GTM, crear ad groups restantes.
+
+Cuando el usuario pegue un reporte, detecta de qué cuenta es por el nombre/ID y analiza en contexto correcto. Si el reporte no especifica, pregunta. Responde en español, conversacionalmente.`
+};
+
+var WELCOME = {
+  matmarkt: 'Listo. Tengo el contexto completo de MatMarkt cargado — campañas, cambios del 6 de abril, benchmarks y alertas pendientes.\n\nPega el reporte semanal cuando lo tengas y te digo qué mejoró, qué empeoró y qué toca hacer. O pregúntame lo que quieras sobre las campañas.',
+  cortina: 'Contexto de Cortina Hawaiana cargado. Recuerdo dónde quedamos: ad group de Cuartos Fríos pendiente de crear, Webflow sin publicar, y lo más urgente — el tracking de conversiones que todavía no está configurado.\n\nPega un reporte o dime en qué quieres avanzar hoy.',
+  both: 'Contexto de ambas cuentas cargado — MatMarkt y Cortina Hawaiana.\n\nCuando pegues un reporte, detecto automáticamente de qué cuenta es. O pregúntame lo que quieras sobre cualquiera de las dos.'
+};
+
+function setAccount(acc) {
+  currentAccount = acc;
+  document.getElementById('btn-mm').className = 'acc-btn' + (acc === 'matmarkt' ? ' active-mm' : '');
+  document.getElementById('btn-ch').className = 'acc-btn' + (acc === 'cortina' ? ' active-ch' : '');
+  document.getElementById('btn-both').className = 'acc-btn' + (acc === 'both' ? ' active-mm' : '');
+  history = [];
+  var chat = document.getElementById('chat');
+  chat.innerHTML = '';
+  appendMsg('claude', WELCOME[acc]);
+}
+
+function quickPrompt(type) {
+  var prompts = {
+    weekly: 'Aquí está el reporte semanal:\n\n',
+    flags: '¿Hay alguna alerta o problema urgente que deba atender esta semana?',
+    vs: '¿Cómo estamos comparado con la semana anterior? ¿Qué cambió?',
+    next: '¿Qué campaña o keyword debería optimizar hoy primero?'
+  };
+  document.getElementById('input').value = prompts[type];
+  document.getElementById('input').focus();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); send(); }
+}
+
+function appendMsg(role, text) {
+  var chat = document.getElementById('chat');
+  var div = document.createElement('div');
+  div.className = 'msg msg-' + role;
+  var icon = role === 'user' ? 'TÚ' : 'AI';
+  var label = role === 'user' ? 'tú' : 'analista';
+  div.innerHTML = '<div class="msg-icon">' + icon + '</div>'
+    + '<div class="msg-body">'
+    + '<div class="msg-label">' + label + '</div>'
+    + '<div class="msg-text">' + escHtml(text) + '</div>'
+    + '</div>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function appendThinking() {
+  var chat = document.getElementById('chat');
+  var div = document.createElement('div');
+  div.className = 'msg msg-claude';
+  div.id = 'thinking-msg';
+  div.innerHTML = '<div class="msg-icon">AI</div>'
+    + '<div class="msg-body">'
+    + '<div class="msg-label">analista</div>'
+    + '<div class="thinking"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>'
+    + '</div>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeThinking() {
+  var el = document.getElementById('thinking-msg');
+  if (el) el.remove();
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function send() {
+  var input = document.getElementById('input');
+  var text = input.value.trim();
+  if (!text) return;
+
+  appendMsg('user', text);
+  input.value = '';
+  input.style.height = 'auto';
+
+  history.push({ role: 'user', content: text });
+
+  var btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  document.getElementById('status-right').textContent = 'analizando…';
+  appendThinking();
+
+  try {
+    var res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM[currentAccount],
+        messages: history
+      })
+    });
+
+    var data = await res.json();
+    var reply = (data.content && data.content[0] && data.content[0].text)
+      ? data.content[0].text
+      : 'Error: no se recibió respuesta.';
+
+    removeThinking();
+    appendMsg('claude', reply);
+    history.push({ role: 'assistant', content: reply });
+
+  } catch(e) {
+    removeThinking();
+    appendMsg('claude', 'Error de conexión: ' + e.message);
+  }
+
+  btn.disabled = false;
+  document.getElementById('status-right').textContent = 'listo';
+}
+
+// init
+appendMsg('claude', WELCOME['matmarkt']);
+</script>
+</body>
+</html>
