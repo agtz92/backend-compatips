@@ -2,9 +2,10 @@ import strawberry
 from typing import List, Optional
 from .models import Post, ProductoOferta
 from .types import PostType, ProductoOfertaType
+from .webhooks import send_botize_webhook_async
 from django.db.models import Q
+from django.core.cache import cache
 from datetime import datetime, date, timedelta
-import requests, json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -13,12 +14,15 @@ logger = logging.getLogger(__name__)
 @strawberry.type
 class Query:
     @strawberry.field
-    def posts(self) -> List[PostType]:
-        return Post.objects.all()
+    def posts(self, limit: int = 20, offset: int = 0) -> List[PostType]:
+        return Post.objects.all()[offset:offset + limit]
 
     @strawberry.field
-    def productos(self) -> List[ProductoOfertaType]:
-        return ProductoOferta.objects.order_by('-fecha')
+    def productos(self, limit: Optional[int] = None, offset: int = 0) -> List[ProductoOfertaType]:
+        queryset = ProductoOferta.objects.order_by('-fecha')
+        if limit is not None:
+            return queryset[offset:offset + limit]
+        return queryset[offset:]
 
 
     @strawberry.field
@@ -26,7 +30,9 @@ class Query:
         self,
         categoria: Optional[str] = None,
         search: Optional[str] = None,
-        ordenar_por: Optional[str] = None
+        ordenar_por: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: int = 0
     ) -> List[ProductoOfertaType]:
         limite = date.today() - timedelta(weeks=2)
         queryset = ProductoOferta.objects.filter(fecha__gte=limite)
@@ -42,7 +48,9 @@ class Query:
         else:
             queryset = queryset.order_by('-fecha')
 
-        return queryset
+        if limit is not None:
+            return queryset[offset:offset + limit]
+        return queryset[offset:]
 
 
     @strawberry.field
@@ -51,7 +59,16 @@ class Query:
     
     @strawberry.field
     def categorias_unicas(self) -> List[str]:
-        return ProductoOferta.objects.order_by().values_list('categoria', flat=True).distinct()
+        cache_key = 'categorias_unicas'
+        categorias = cache.get(cache_key)
+        if categorias is None:
+            categorias = list(
+                ProductoOferta.objects.order_by()
+                .values_list('categoria', flat=True)
+                .distinct()
+            )
+            cache.set(cache_key, categorias, timeout=600)  # 10 minutes
+        return categorias
 
 
 
@@ -88,21 +105,11 @@ class Mutation:
             categoria=categoria
         )
 
-        # 👉 Enviar POST al webhook de Botize
-        try:
-            webhook_url = "https://botize.com/webhook/agtz92@2ea6e9221b445044c5c5d91de7227b97ae51e5b2c9bf1fd88056b9aaff8af976/24"
-            payload = {
-                "title": producto.titulo,
-                "img": producto.url_imagen,
-                "originalprice": str(producto.precio_original),
-                "discountprice": str(producto.precio_oferta),
-                "url": f"https://www.compatips.com/producto/{producto.id}"
-            }
-            logger.info("📦 JSON enviado a Botize:\n%s", json.dumps(payload, indent=2, ensure_ascii=False))
-            response = requests.post(webhook_url, json=payload)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            print(f"❌ Error al enviar webhook: {e}")
+        # Invalidate categories cache on new product
+        cache.delete('categorias_unicas')
+
+        # Send Botize webhook in background thread (non-blocking)
+        send_botize_webhook_async(producto)
 
         return producto
 

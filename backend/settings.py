@@ -33,11 +33,15 @@ DEBUG = False
 
 WEBHOOK_SECRET = os.getenv('WEBHOOK_SECRET')
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1','backend-compatips.onrender.com', 'frontend-compatips-x8tl.vercel.app']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'backend-compatips.onrender.com', 'frontend-compatips.vercel.app', 'www.compatips.com']
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-CSRF_TRUSTED_ORIGINS = ['http://localhost:3000']
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:3000',
+    'https://frontend-compatips.vercel.app',
+    'https://www.compatips.com',
+]
 
 # Application definition
 
