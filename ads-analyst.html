@@ -329,7 +329,7 @@
 
 <script>
 var currentAccount = 'matmarkt';
-var history = [];
+var chatHistory = [];
 
 var SYSTEM = {
   matmarkt: `Eres el analista de Google Ads de MatMarkt (cuenta 932-342-9199). Conoces esta cuenta en detalle porque llevamos horas trabajando juntos.
@@ -459,7 +459,7 @@ function setAccount(acc) {
   document.getElementById('btn-mm').className = 'acc-btn' + (acc === 'matmarkt' ? ' active-mm' : '');
   document.getElementById('btn-ch').className = 'acc-btn' + (acc === 'cortina' ? ' active-ch' : '');
   document.getElementById('btn-both').className = 'acc-btn' + (acc === 'both' ? ' active-mm' : '');
-  history = [];
+  chatHistory = [];
   var chat = document.getElementById('chat');
   chat.innerHTML = '';
   appendMsg('claude', WELCOME[acc]);
@@ -527,7 +527,7 @@ async function send() {
   input.value = '';
   input.style.height = 'auto';
 
-  history.push({ role: 'user', content: text });
+  chatHistory.push({ role: 'user', content: text });
 
   var btn = document.getElementById('send-btn');
   btn.disabled = true;
@@ -542,7 +542,7 @@ async function send() {
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
         system: SYSTEM[currentAccount],
-        messages: history
+        messages: chatHistory
       })
     });
 
@@ -553,7 +553,7 @@ async function send() {
 
     removeThinking();
     appendMsg('claude', reply);
-    history.push({ role: 'assistant', content: reply });
+    chatHistory.push({ role: 'assistant', content: reply });
 
   } catch(e) {
     removeThinking();
