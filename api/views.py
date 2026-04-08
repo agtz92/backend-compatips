@@ -323,6 +323,83 @@ def ads_snapshot_compare(request):
 
 
 @csrf_exempt
+def recibir_ads_report(request):
+    """Receive Google Ads campaign data from Google Ads Scripts."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    auth_error = _check_ads_auth(request)
+    if auth_error:
+        return auth_error
+
+    try:
+        body = json.loads(request.body.decode('utf-8'))
+        account = body.get('account', '')
+        if account not in ('matmarkt', 'cortina'):
+            return JsonResponse({'error': 'Invalid account. Use "matmarkt" or "cortina".'}, status=400)
+
+        campaigns = body.get('campaigns', [])
+        if not campaigns:
+            return JsonResponse({'error': 'No campaign data provided'}, status=400)
+
+        report_date_str = body.get('report_date', date.today().isoformat())
+        try:
+            report_date = datetime.strptime(report_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            report_date = date.today()
+
+        # Build raw_report text from structured data for the analysis field
+        raw_lines = [f"Google Ads Report — {account} — {report_date.isoformat()}", ""]
+        for c in campaigns:
+            raw_lines.append(f"Campaign: {c.get('campaign_name', 'Unknown')}")
+            raw_lines.append(f"  Spend: ${c.get('spend', 0):,.2f}")
+            raw_lines.append(f"  Clicks: {c.get('clicks', 0)}")
+            raw_lines.append(f"  Impressions: {c.get('impressions', 0)}")
+            raw_lines.append(f"  CTR: {c.get('ctr', 0):.2f}%")
+            raw_lines.append(f"  Conversions: {c.get('conversions', 0)}")
+            raw_lines.append(f"  Cost/Conv: ${c.get('cost_per_conversion', 0):,.2f}")
+            kws = c.get('keywords', [])
+            if kws:
+                raw_lines.append("  Keywords:")
+                for kw in kws:
+                    raw_lines.append(f"    - {kw.get('text', '')} (CPC: ${kw.get('cpc', 0):.2f}, QS: {kw.get('quality_score', '-')})")
+            raw_lines.append("")
+        raw_report = "\n".join(raw_lines)
+
+        # Normalize campaign_metrics to match expected schema
+        campaign_metrics = []
+        for c in campaigns:
+            campaign_metrics.append({
+                'campaign_name': c.get('campaign_name', 'Unknown'),
+                'campaign_id': c.get('campaign_id'),
+                'spend': float(c.get('spend', 0)),
+                'conversions': float(c.get('conversions', 0)),
+                'cost_per_conversion': float(c.get('cost_per_conversion', 0)),
+                'ctr': float(c.get('ctr', 0)),
+                'clicks': int(c.get('clicks', 0)),
+                'impressions': int(c.get('impressions', 0)),
+                'impression_share': c.get('impression_share'),
+                'keywords': c.get('keywords', []),
+            })
+
+        snapshot = AdsReportSnapshot.objects.create(
+            account=account,
+            report_date=report_date,
+            raw_report=raw_report,
+            analysis='Auto-imported from Google Ads Script',
+            campaign_metrics=campaign_metrics,
+            is_auto_saved=True,
+        )
+
+        logger.info("Ads report snapshot created via webhook: id=%s account=%s", snapshot.id, account)
+        return JsonResponse({'status': 'ok', 'snapshot_id': snapshot.id}, status=201)
+
+    except Exception as e:
+        logger.error("Error receiving ads report: %s", e)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@csrf_exempt
 def recibir_webhook(request):
     if request.method != "POST":
         return JsonResponse({"error": "Método no permitido"}, status=405)
