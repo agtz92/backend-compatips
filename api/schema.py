@@ -1,7 +1,7 @@
 import strawberry
 from typing import List, Optional
-from .models import Post, ProductoOferta
-from .types import PostType, ProductoOfertaType
+from .models import Post, ProductoOferta, AdsReportSnapshot
+from .types import PostType, ProductoOfertaType, AdsReportSnapshotType
 from .webhooks import send_botize_webhook_async
 from django.db.models import Q
 from django.core.cache import cache
@@ -57,6 +57,25 @@ class Query:
     def producto_por_id(self, id: strawberry.ID) -> ProductoOfertaType:
         return ProductoOferta.objects.get(pk=id)
     
+    @strawberry.field
+    def ads_snapshots(
+        self,
+        account: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0
+    ) -> List[AdsReportSnapshotType]:
+        qs = AdsReportSnapshot.objects.all()
+        if account:
+            qs = qs.filter(account=account)
+        return qs[offset:offset + limit]
+
+    @strawberry.field
+    def ads_snapshot(self, id: strawberry.ID) -> Optional[AdsReportSnapshotType]:
+        try:
+            return AdsReportSnapshot.objects.get(pk=id)
+        except AdsReportSnapshot.DoesNotExist:
+            return None
+
     @strawberry.field
     def categorias_unicas(self) -> List[str]:
         cache_key = 'categorias_unicas'

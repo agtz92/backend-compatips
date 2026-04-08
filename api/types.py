@@ -1,6 +1,8 @@
 import strawberry
 from strawberry_django import type
-from .models import ProductoOferta, Post
+from strawberry.scalars import JSON
+from typing import Optional
+from .models import ProductoOferta, Post, AdsReportSnapshot
 from datetime import datetime, timedelta, date
 from django.utils import timezone
 
@@ -35,4 +37,16 @@ class ProductoOfertaType:
 
         limite = date.today() - timedelta(weeks=2)
         return fecha_dt >= limite
+
+
+@type(AdsReportSnapshot)
+class AdsReportSnapshotType:
+    id: strawberry.ID
+    account: str
+    report_date: str
+    created_at: str
+    raw_report: str
+    analysis: str
+    campaign_metrics: JSON
+    is_auto_saved: bool
 
