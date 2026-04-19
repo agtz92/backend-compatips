@@ -22,19 +22,23 @@ backend-compatips/
 ├── runtime.txt            # Python version (3.10.12)
 ├── requirements.txt       # pip dependencies
 ├── ads-analyst.html       # Standalone HTML tool served at /ads-analyst
+├── facturas.html          # Standalone HTML tool served at /facturas (upload + reconciliación)
 ├── backend/               # Django project settings
 │   ├── settings.py        # Main config (DB, CORS, middleware, logging)
 │   ├── urls.py            # URL routing
 │   ├── wsgi.py
 │   └── asgi.py
 └── api/                   # Main Django app
-    ├── models.py          # Post, ProductoOferta, AdsReportSnapshot
+    ├── models.py          # Post, ProductoOferta, AdsReportSnapshot, Factura, MovimientoBanco
     ├── types.py           # Strawberry GraphQL types (PostType, ProductoOfertaType, AdsReportSnapshotType)
     ├── schema.py          # GraphQL queries + mutations (strawberry.Schema)
-    ├── views.py           # REST views: health check, webhook, ads-analyst proxy, snapshot CRUD
+    ├── views.py           # REST views: health check, webhook, ads-analyst proxy, snapshot CRUD, facturas
     ├── webhooks.py        # Async Botize webhook notification (fire-and-forget)
+    ├── excel_parser.py    # Parse Excel facturación / movimientos bancarios (header-keyword detection)
+    ├── reconciliation.py  # Match facturas vs movimientos (exacto + por coincidencia)
+    ├── sheets_sync.py     # Google Sheets sync (pestañas mensuales, dedupe por folio)
     ├── admin.py           # Django admin registration
-    └── migrations/        # Database migrations (0001–0006)
+    └── migrations/        # Database migrations (0001–0007)
 ```
 
 ## Key URLs
@@ -50,6 +54,10 @@ backend-compatips/
 | `/ads-analyst/api/snapshots` | `ads_snapshots_list_create` | GET: list snapshots, POST: manual save (auth required) |
 | `/ads-analyst/api/snapshots/<id>` | `ads_snapshot_detail` | GET: full snapshot detail (auth required) |
 | `/ads-analyst/api/snapshots/compare` | `ads_snapshot_compare` | GET: compare two snapshots with metric deltas (auth required) |
+| `/facturas` | `facturas_html` | UI para subir Excel de facturación + movimientos bancarios |
+| `/facturas/api/upload` | `upload_facturas` | POST multipart `file` — guarda facturas nuevas y sincroniza a Google Sheets (auth required) |
+| `/facturas/api/movimientos` | `upload_movimientos` | POST multipart `file` — guarda movimientos y reconcilia (auth required) |
+| `/facturas/api/list` | `facturas_list` | GET — lista facturas con su estatus (auth required) |
 
 ## Data Models
 
@@ -65,6 +73,18 @@ backend-compatips/
 - `is_auto_saved` — whether saved automatically from chat or manually
 - Indexed on: `account`, `report_date`
 - Auto-save triggers when a chat message looks like a report (>200 chars + contains campaign/click/CTR/etc. keywords)
+
+### Factura
+- `folio`, `fecha`, `cliente`, `concepto`, `total`
+- `estatus`: `pendiente` | `pagada` | `coincidencia`
+- `movimiento_pago` FK → `MovimientoBanco`, `confianza_coincidencia` (0.0–1.0)
+- `fila_origen` (JSON) — fila completa del Excel original (auditoría)
+- Unique en `(folio, fecha)` para evitar duplicados al re-importar
+
+### MovimientoBanco
+- `fecha`, `descripcion`, `referencia`, `monto`, `tipo`
+- Solo se importan abonos positivos (depósitos)
+- Unique en `(fecha, monto, referencia, descripcion)` para evitar duplicados
 
 ### Post (secondary/legacy)
 - Simple `title`, `content`, `created_at`
@@ -109,7 +129,19 @@ Required in `.env` (never commit):
 - `DATABASE_URL` — PostgreSQL connection string
 - `WEBHOOK_SECRET` — secret for webhook authentication
 - `ANTHROPIC_API_KEY` — API key for ads-analyst chat proxy
-- `APP_PASSWORD` — Bearer token for ads-analyst chat endpoint
+- `APP_PASSWORD` — Bearer token for ads-analyst chat endpoint y endpoints de facturación
+- `FACTURACION_SHEET_ID` — Google Sheet destino para sincronizar facturas (opcional; si no está, se omite el sync)
+- `GOOGLE_SERVICE_ACCOUNT_JSON` — JSON completo del service account con acceso al sheet (compartir el Sheet con el `client_email`)
+
+## Facturación + Conciliación bancaria
+
+Flujo:
+1. Usuario sube Excel de facturación en `/facturas`. El parser detecta columnas por nombre (folio, fecha, cliente, concepto, total) y solo se persisten los folios nuevos. Si `FACTURACION_SHEET_ID` está configurado, las facturas nuevas se agregan al Google Sheet en una pestaña `YYYY-MM Mes` (se crea si no existe; los duplicados por folio se omiten).
+2. Usuario sube Excel de movimientos bancarios. Se importan los abonos positivos nuevos y se ejecuta `reconciliation.conciliar(...)`:
+   - **Pagada**: monto de movimiento = total de factura (±$0.01) **y** el folio o una palabra del cliente (≥4 letras) aparece en descripción/referencia. Ventana de fechas: -3 días a +28 días desde la factura.
+   - **Por coincidencia**: monto coincide pero no se identifica por folio/cliente, dentro de ±7 días. Confianza inversamente proporcional a la distancia en días.
+   - Cada movimiento se asigna a una sola factura (se reserva en `usados`).
+3. La factura actualizada vuelve a sincronizarse al Google Sheet: el sync agrega filas nuevas y, si el folio ya existe en la pestaña del mes, actualiza esa fila (estatus, pago, confianza).
 
 ## Conventions & Patterns
 

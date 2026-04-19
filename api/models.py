@@ -26,6 +26,71 @@ class ProductoOferta(models.Model):
         return f"{self.titulo} - ${self.precio_oferta:.2f}"
 
 
+class Factura(models.Model):
+    ESTATUS_CHOICES = [
+        ('pendiente', 'Pendiente'),
+        ('pagada', 'Pagada'),
+        ('coincidencia', 'Por coincidencia'),
+    ]
+
+    folio = models.CharField(max_length=100, db_index=True)
+    fecha = models.DateField(db_index=True)
+    cliente = models.CharField(max_length=255, blank=True, default='')
+    concepto = models.TextField(blank=True, default='')
+    total = models.DecimalField(max_digits=14, decimal_places=2)
+
+    estatus = models.CharField(
+        max_length=20, choices=ESTATUS_CHOICES, default='pendiente', db_index=True
+    )
+    movimiento_pago = models.ForeignKey(
+        'MovimientoBanco', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='facturas_pagadas',
+    )
+    confianza_coincidencia = models.FloatField(null=True, blank=True)
+
+    fila_origen = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-fecha', '-creado_en']
+        constraints = [
+            models.UniqueConstraint(fields=['folio', 'fecha'], name='unique_factura_folio_fecha'),
+        ]
+        indexes = [
+            models.Index(fields=['fecha', 'estatus']),
+        ]
+
+    def __str__(self):
+        return f"{self.folio} — {self.fecha} — ${self.total:.2f}"
+
+
+class MovimientoBanco(models.Model):
+    fecha = models.DateField(db_index=True)
+    descripcion = models.TextField(blank=True, default='')
+    referencia = models.CharField(max_length=255, blank=True, default='', db_index=True)
+    monto = models.DecimalField(max_digits=14, decimal_places=2)
+    tipo = models.CharField(max_length=20, blank=True, default='')
+
+    fila_origen = models.JSONField(default=dict, blank=True)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-fecha', '-creado_en']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['fecha', 'monto', 'referencia', 'descripcion'],
+                name='unique_movimiento',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['fecha', 'monto']),
+        ]
+
+    def __str__(self):
+        return f"{self.fecha} — ${self.monto:.2f} — {self.referencia or self.descripcion[:40]}"
+
+
 class AdsReportSnapshot(models.Model):
     ACCOUNT_CHOICES = [
         ('matmarkt', 'MatMarkt'),
