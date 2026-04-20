@@ -645,6 +645,19 @@ def upload_movimientos(request):
 
 
 @csrf_exempt
+def facturas_reset(request):
+    """POST: borra todos los registros de Factura y MovimientoBanco."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+    facturas_n, _ = Factura.objects.all().delete()
+    movs_n, _ = MovimientoBanco.objects.all().delete()
+    return JsonResponse({'status': 'ok', 'facturas_borradas': facturas_n, 'movimientos_borrados': movs_n})
+
+
+@csrf_exempt
 def facturas_list(request):
     """GET: lista facturas con su estado de conciliación."""
     if request.method != 'GET':
