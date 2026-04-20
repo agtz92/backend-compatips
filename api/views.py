@@ -713,7 +713,8 @@ def facturas_override(request):
         f = Factura.objects.get(pk=factura_id)
     except Factura.DoesNotExist:
         return JsonResponse({'error': 'Factura no encontrada'}, status=404)
-    if quitar:
+    estatus_target = body.get('estatus', 'pagada')
+    if quitar or estatus_target == 'pendiente':
         f.override_manual = False
         f.comentario_override = ''
         f.estatus = 'pendiente'
