@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python manage.py makemigrations --name add_empresa)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(python3)",
+      "Bash(python)",
+      "Bash(python -m pip install openpyxl --quiet)",
+      "Bash(python -c \"import ast; files = ['api/excel_parser.py','api/views.py','api/sheets_sync.py','api/models.py']; [print\\(f, 'OK'\\) or ast.parse\\(open\\(f\\).read\\(\\)\\) for f in files]\")",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

@@ -673,3 +673,37 @@ def facturas_list(request):
     total = qs.count()
     items = [_factura_to_dict(f) for f in qs[offset:offset + limit]]
     return JsonResponse({'count': total, 'facturas': items})
+
+
+@csrf_exempt
+def facturas_empresas(request):
+    """GET: lista de empresas únicas registradas en la DB."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+    empresas = list(
+        Factura.objects.values_list('empresa', flat=True)
+        .distinct()
+        .order_by('empresa')
+    )
+    return JsonResponse({'empresas': empresas})
+
+
+@csrf_exempt
+def facturas_config(request):
+    """GET: configuración por empresa (URL de Google Sheets)."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+    empresa = request.GET.get('empresa', '').strip()
+    sheet_id = None
+    if empresa:
+        sheet_id = os.getenv(f'FACTURACION_SHEET_ID_{empresa.upper()}')
+    if not sheet_id:
+        sheet_id = os.getenv('FACTURACION_SHEET_ID', '')
+    sheets_url = f'https://docs.google.com/spreadsheets/d/{sheet_id}' if sheet_id else None
+    return JsonResponse({'sheets_url': sheets_url})
