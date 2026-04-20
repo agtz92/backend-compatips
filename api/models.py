@@ -49,6 +49,9 @@ class Factura(models.Model):
     )
     confianza_coincidencia = models.FloatField(null=True, blank=True)
 
+    override_manual = models.BooleanField(default=False, db_index=True)
+    comentario_override = models.TextField(blank=True, default='')
+
     fila_origen = models.JSONField(default=dict, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
     actualizado_en = models.DateTimeField(auto_now=True)

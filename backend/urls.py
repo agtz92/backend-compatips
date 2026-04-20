@@ -8,7 +8,7 @@ from api.views import (
     ads_analyst_html, ads_analyst_chat,
     ads_snapshots_list_create, ads_snapshot_detail, ads_snapshot_compare,
     facturas_html, upload_facturas, upload_movimientos, facturas_list,
-    facturas_empresas, facturas_config,
+    facturas_override, facturas_empresas, facturas_config,
 )
 
 
@@ -18,6 +18,7 @@ urlpatterns = [
     path('ads-analyst/api/snapshots', ads_snapshots_list_create),
     path('ads-analyst/api/chat', ads_analyst_chat),
     path('ads-analyst', ads_analyst_html),
+    path('facturas/api/override', facturas_override),
     path('facturas/api/empresas', facturas_empresas),
     path('facturas/api/config', facturas_config),
     path('facturas/api/upload', upload_facturas),

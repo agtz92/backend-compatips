@@ -463,6 +463,8 @@ def _factura_to_dict(f):
         'estatus': f.estatus,
         'estatus_display': f.get_estatus_display(),
         'confianza_coincidencia': f.confianza_coincidencia,
+        'override_manual': f.override_manual,
+        'comentario_override': f.comentario_override,
         'pago': pago,
     }
 
@@ -600,7 +602,11 @@ def upload_movimientos(request):
     # Filtrar facturas por prefijos de folio si hay regla para esta cuenta
     from .models import ReglaCuenta
     from django.db.models import Q
-    facturas_qs = Factura.objects.filter(estatus__in=['pendiente', 'coincidencia'], empresa=empresa)
+    facturas_qs = Factura.objects.filter(
+        estatus__in=['pendiente', 'coincidencia'],
+        empresa=empresa,
+        override_manual=False,
+    )
     prefijos = []
     if cuenta:
         try:
@@ -680,6 +686,53 @@ def facturas_list(request):
     total = qs.count()
     items = [_factura_to_dict(f) for f in qs[offset:offset + limit]]
     return JsonResponse({'count': total, 'facturas': items})
+
+
+@csrf_exempt
+def facturas_override(request):
+    """POST: marca/desmarca una factura como pagada manualmente.
+
+    Body JSON: { "factura_id": int, "comentario": str, "quitar": bool }
+    - quitar=false (default): estatus='pagada', override_manual=True
+    - quitar=true: restaura estatus='pendiente', override_manual=False
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+    import json as _json
+    try:
+        body = _json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'JSON inválido'}, status=400)
+    factura_id = body.get('factura_id')
+    comentario = body.get('comentario', '').strip()
+    quitar = bool(body.get('quitar', False))
+    try:
+        f = Factura.objects.get(pk=factura_id)
+    except Factura.DoesNotExist:
+        return JsonResponse({'error': 'Factura no encontrada'}, status=404)
+    if quitar:
+        f.override_manual = False
+        f.comentario_override = ''
+        f.estatus = 'pendiente'
+        f.movimiento_pago = None
+        f.confianza_coincidencia = None
+    else:
+        f.override_manual = True
+        f.comentario_override = comentario
+        f.estatus = 'pagada'
+        f.movimiento_pago = None
+        f.confianza_coincidencia = 1.0
+    f.save()
+    empresa = f.empresa
+    if os.getenv('FACTURACION_SHEET_ID') or empresa:
+        try:
+            sheets_sync.sync_facturas_a_sheets([_factura_to_dict(f)], empresa=empresa)
+        except Exception as e:
+            logger.warning("Sheets sync (override) falló: %s", e)
+    return JsonResponse({'status': 'ok', 'factura': _factura_to_dict(f)})
 
 
 @csrf_exempt
