@@ -60,9 +60,9 @@
     </section>
 
     <section class="card">
-      <h2>2. Subir movimientos bancarios (Excel)</h2>
-      <p>Cada movimiento se compara con las facturas: exacto = pagada, similar = "por coincidencia".</p>
-      <input id="movs-file" type="file" accept=".xlsx,.xls">
+      <h2>2. Subir movimientos bancarios (Excel o TXT)</h2>
+      <p>Acepta .xlsx del banco o export TSV/.txt con columnas Día, Concepto / Referencia, cargo, Abono, Saldo. Solo se consideran abonos. Exacto = pagada, similar = "por coincidencia".</p>
+      <input id="movs-file" type="file" accept=".xlsx,.xls,.txt,.csv,.tsv">
       <button id="btn-movs">Subir movimientos &amp; conciliar</button>
       <div id="r-movs" class="result" hidden></div>
     </section>

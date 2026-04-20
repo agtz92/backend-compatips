@@ -550,10 +550,15 @@ def upload_movimientos(request):
     if not upload:
         return JsonResponse({'error': 'Falta el archivo `file`'}, status=400)
 
+    nombre = (upload.name or '').lower()
+    es_texto = nombre.endswith('.txt') or nombre.endswith('.csv') or nombre.endswith('.tsv')
     try:
-        registros = excel_parser.parse_movimientos(upload)
+        if es_texto:
+            registros = excel_parser.parse_movimientos_txt(upload)
+        else:
+            registros = excel_parser.parse_movimientos(upload)
     except Exception as e:
-        return JsonResponse({'error': f'No se pudo leer el Excel: {e}'}, status=400)
+        return JsonResponse({'error': f'No se pudo leer el archivo: {e}'}, status=400)
 
     movs_nuevos = []
     duplicados = 0
