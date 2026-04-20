@@ -72,7 +72,7 @@ class MovimientoBanco(models.Model):
     descripcion = models.TextField(blank=True, default='')
     referencia = models.CharField(max_length=255, blank=True, default='', db_index=True)
     monto = models.DecimalField(max_digits=14, decimal_places=2)
-    tipo = models.CharField(max_length=20, blank=True, default='')
+    tipo = models.CharField(max_length=100, blank=True, default='')
 
     fila_origen = models.JSONField(default=dict, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
