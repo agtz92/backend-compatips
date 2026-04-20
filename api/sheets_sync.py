@@ -61,18 +61,76 @@ def _tab_name_for(d):
     return f"{d.year}-{d.month:02d} {MONTH_NAMES_ES[d.month]}"
 
 
+def _format_worksheet(ss, ws):
+    """Aplica formato al worksheet: header en negritas, primera columna en
+    negritas, y formato condicional por estatus (verde/amarillo/gris)."""
+    sheet_id = ws.id
+    n_cols = len(HEADERS)
+    # Estatus está en columna F (índice 5, letra F)
+    # La fórmula usa $F2 con fila relativa para aplicarse fila por fila
+    data_range = {
+        'sheetId': sheet_id,
+        'startRowIndex': 1,
+        'startColumnIndex': 0,
+        'endColumnIndex': n_cols,
+    }
+    ss.batch_update({'requests': [
+        # Header en negritas
+        {'repeatCell': {
+            'range': {'sheetId': sheet_id, 'startRowIndex': 0, 'endRowIndex': 1,
+                      'startColumnIndex': 0, 'endColumnIndex': n_cols},
+            'cell': {'userEnteredFormat': {'textFormat': {'bold': True}}},
+            'fields': 'userEnteredFormat.textFormat.bold',
+        }},
+        # Primera columna en negritas (datos)
+        {'repeatCell': {
+            'range': {'sheetId': sheet_id, 'startRowIndex': 1,
+                      'startColumnIndex': 0, 'endColumnIndex': 1},
+            'cell': {'userEnteredFormat': {'textFormat': {'bold': True}}},
+            'fields': 'userEnteredFormat.textFormat.bold',
+        }},
+        # ✓ Pagada → verde
+        {'addConditionalFormatRule': {'index': 0, 'rule': {
+            'ranges': [data_range],
+            'booleanRule': {
+                'condition': {'type': 'CUSTOM_FORMULA',
+                              'values': [{'userEnteredValue': '=ISNUMBER(SEARCH("Pagada",$F2))'}]},
+                'format': {'backgroundColor': {'red': 0.714, 'green': 0.882, 'blue': 0.804}},
+            },
+        }}},
+        # ⚠ Por coincidencia → amarillo
+        {'addConditionalFormatRule': {'index': 1, 'rule': {
+            'ranges': [data_range],
+            'booleanRule': {
+                'condition': {'type': 'CUSTOM_FORMULA',
+                              'values': [{'userEnteredValue': '=ISNUMBER(SEARCH("coincidencia",$F2))'}]},
+                'format': {'backgroundColor': {'red': 0.988, 'green': 0.910, 'blue': 0.698}},
+            },
+        }}},
+        # Pendiente → gris claro
+        {'addConditionalFormatRule': {'index': 2, 'rule': {
+            'ranges': [data_range],
+            'booleanRule': {
+                'condition': {'type': 'CUSTOM_FORMULA',
+                              'values': [{'userEnteredValue': '=$F2="Pendiente"'}]},
+                'format': {'backgroundColor': {'red': 0.953, 'green': 0.953, 'blue': 0.953}},
+            },
+        }}},
+    ]})
+
+
 def _get_or_create_worksheet(spreadsheet, tab_name):
     try:
         ws = spreadsheet.worksheet(tab_name)
+        created = False
     except gspread.WorksheetNotFound:
-        ws = spreadsheet.add_worksheet(title=tab_name, rows=200, cols=len(HEADERS))
-        ws.append_row(HEADERS, value_input_option='USER_ENTERED')
-        return ws
-    # Asegurar header si la hoja existe pero está vacía
+        ws = spreadsheet.add_worksheet(title=tab_name, rows=500, cols=len(HEADERS))
+        created = True
     first = ws.row_values(1)
     if not first:
         ws.append_row(HEADERS, value_input_option='USER_ENTERED')
-    return ws
+        created = True
+    return ws, created
 
 
 def _existing_folios(ws):
@@ -144,7 +202,9 @@ def sync_facturas_a_sheets(facturas, spreadsheet_id=None, empresa=''):
     resumen = {}
     last_col = _col_letter(len(HEADERS))
     for tab_name, items in por_mes.items():
-        ws = _get_or_create_worksheet(ss, tab_name)
+        ws, created = _get_or_create_worksheet(ss, tab_name)
+        if created:
+            _format_worksheet(ss, ws)
         existentes = _existing_folios(ws)
         nuevas = [f for f in items if f['folio'] not in existentes]
         actualizadas = [f for f in items if f['folio'] in existentes]
