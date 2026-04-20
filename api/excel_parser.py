@@ -185,3 +185,99 @@ def parse_movimientos(file_obj):
             'fila_origen': {k: _to_str(get(k)) for k in mapping},
         })
     return movimientos
+
+
+def _decode_bytes(raw):
+    """Decodifica bytes probando encodings comunes en exports bancarios MX."""
+    for enc in ('utf-8-sig', 'utf-8', 'cp1252', 'latin-1'):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('latin-1', errors='replace')
+
+
+def _split_row(line):
+    """Divide una línea por tab si existe, si no por 2+ espacios."""
+    if '\t' in line:
+        return [c.strip() for c in line.split('\t')]
+    return [c.strip() for c in re.split(r' {2,}', line)]
+
+
+def parse_movimientos_txt(file_obj):
+    """Parsea un export TSV/texto del banco con columnas:
+    Día | Concepto / Referencia | cargo | Abono | Saldo
+
+    Solo se quedan las filas con valor en `Abono` (depósitos).
+    El string después del primer '/' en Concepto se usa como referencia.
+    """
+    raw = file_obj.read()
+    if isinstance(raw, bytes):
+        text = _decode_bytes(raw)
+    else:
+        text = raw
+
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if not lines:
+        raise ValueError('El archivo está vacío.')
+
+    header_idx = None
+    for i, ln in enumerate(lines[:10]):
+        norm = _normalize(ln)
+        if ('dia' in norm or 'fecha' in norm) and 'abono' in norm:
+            header_idx = i
+            break
+    if header_idx is None:
+        raise ValueError('No se encontró encabezado con Día/Abono en el archivo.')
+
+    headers = [_normalize(c) for c in _split_row(lines[header_idx])]
+    def col(*keywords):
+        for i, h in enumerate(headers):
+            if any(k in h for k in keywords):
+                return i
+        return None
+
+    idx_fecha = col('dia', 'fecha')
+    idx_concepto = col('concepto', 'referencia', 'descripcion', 'movimiento')
+    idx_cargo = col('cargo', 'debito', 'retiro')
+    idx_abono = col('abono', 'deposito', 'credito')
+    if idx_fecha is None or idx_abono is None:
+        raise ValueError('El archivo debe incluir columnas Día y Abono.')
+
+    movimientos = []
+    for ln in lines[header_idx + 1:]:
+        cols = _split_row(ln)
+        if len(cols) <= max(idx_fecha, idx_abono):
+            continue
+        fecha = _to_date(cols[idx_fecha])
+        if fecha is None:
+            continue
+        abono_raw = cols[idx_abono] if idx_abono < len(cols) else ''
+        monto = _to_decimal(abono_raw)
+        if monto is None or monto <= 0:
+            continue
+        cargo_raw = cols[idx_cargo] if idx_cargo is not None and idx_cargo < len(cols) else ''
+        if _to_decimal(cargo_raw):
+            continue
+        concepto_full = cols[idx_concepto] if idx_concepto is not None and idx_concepto < len(cols) else ''
+        if '/' in concepto_full:
+            tipo, _, referencia = concepto_full.partition('/')
+            tipo = tipo.strip()
+            referencia = referencia.strip()
+        else:
+            tipo = ''
+            referencia = concepto_full.strip()
+        movimientos.append({
+            'fecha': fecha,
+            'descripcion': concepto_full.strip(),
+            'referencia': referencia,
+            'monto': monto,
+            'tipo': tipo,
+            'fila_origen': {
+                'dia': cols[idx_fecha],
+                'concepto': concepto_full,
+                'cargo': cargo_raw,
+                'abono': abono_raw,
+            },
+        })
+    return movimientos
