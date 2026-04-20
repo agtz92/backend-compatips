@@ -497,26 +497,30 @@ def upload_facturas(request):
 
     nuevas = []
     actualizadas_upload = []
-    for r in registros:
-        try:
-            with transaction.atomic():
-                f, created = Factura.objects.update_or_create(
-                    folio=r['folio'],
-                    fecha=r['fecha'],
-                    empresa=empresa,
-                    defaults={
-                        'cliente': r['cliente'],
-                        'concepto': r['concepto'],
-                        'total': r['total'],
-                        'fila_origen': r['fila_origen'],
-                    },
-                )
-            if created:
-                nuevas.append(f)
-            else:
-                actualizadas_upload.append(f)
-        except IntegrityError:
-            pass
+    try:
+        for r in registros:
+            try:
+                with transaction.atomic():
+                    f, created = Factura.objects.update_or_create(
+                        folio=r['folio'],
+                        fecha=r['fecha'],
+                        empresa=empresa,
+                        defaults={
+                            'cliente': r['cliente'],
+                            'concepto': r['concepto'],
+                            'total': r['total'],
+                            'fila_origen': r['fila_origen'],
+                        },
+                    )
+                if created:
+                    nuevas.append(f)
+                else:
+                    actualizadas_upload.append(f)
+            except IntegrityError:
+                pass
+    except Exception as e:
+        logger.error("Error guardando facturas: %s", e)
+        return JsonResponse({'error': f'Error guardando facturas: {e}'}, status=500)
 
     sheets_resumen = None
     sheets_error = None
@@ -531,15 +535,19 @@ def upload_facturas(request):
             logger.error("Sheets sync falló: %s", e)
             sheets_error = str(e)
 
-    return JsonResponse({
-        'status': 'ok',
-        'leidas': len(registros),
-        'nuevas': len(nuevas),
-        'actualizadas': len(actualizadas_upload),
-        'sheets': sheets_resumen,
-        'sheets_error': sheets_error,
-        'facturas': [_factura_to_dict(f) for f in nuevas],
-    })
+    try:
+        return JsonResponse({
+            'status': 'ok',
+            'leidas': len(registros),
+            'nuevas': len(nuevas),
+            'actualizadas': len(actualizadas_upload),
+            'sheets': sheets_resumen,
+            'sheets_error': sheets_error,
+            'facturas': [_factura_to_dict(f) for f in nuevas],
+        })
+    except Exception as e:
+        logger.error("Error serializando respuesta: %s", e)
+        return JsonResponse({'error': f'Error interno: {e}'}, status=500)
 
 
 @csrf_exempt

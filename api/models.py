@@ -143,6 +143,3 @@ class ReglaCuenta(models.Model):
 
     def __str__(self):
         return f"{self.empresa} / {self.cuenta} → {self.prefijos_folio}"
-
-    def __str__(self):
-        return f"{self.get_account_display()} — {self.report_date}"
