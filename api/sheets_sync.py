@@ -54,7 +54,10 @@ def _get_client():
 
 
 def _tab_name_for(d):
-    """Nombre de la pestaña: 'YYYY-MM Mes'."""
+    """Nombre de la pestaña: 'YYYY-MM Mes'. Acepta date o string ISO."""
+    if isinstance(d, str):
+        from datetime import date as _date
+        d = _date.fromisoformat(d)
     return f"{d.year}-{d.month:02d} {MONTH_NAMES_ES[d.month]}"
 
 
