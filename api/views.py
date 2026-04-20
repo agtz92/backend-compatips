@@ -3,8 +3,10 @@ from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
 import json
 import re
 import threading
-from .models import ProductoOferta, AdsReportSnapshot
+from .models import ProductoOferta, AdsReportSnapshot, Factura, MovimientoBanco
 from .webhooks import send_botize_webhook_async
+from . import excel_parser, reconciliation, sheets_sync
+from django.db import IntegrityError, transaction
 from datetime import datetime, date
 from decimal import Decimal
 from django.conf import settings
@@ -427,3 +429,202 @@ def recibir_webhook(request):
     except Exception as e:
         print(f"❌ Error general: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+# ---------- Facturación + Conciliación bancaria ----------
+
+def _check_facturas_auth(request):
+    auth = request.headers.get('Authorization', '')
+    app_password = os.getenv('APP_PASSWORD', '')
+    if not app_password or auth != f'Bearer {app_password}':
+        return JsonResponse({'error': 'Unauthorized'}, status=401)
+    return None
+
+
+def _factura_to_dict(f):
+    pago = None
+    if f.movimiento_pago_id:
+        m = f.movimiento_pago
+        pago = {
+            'id': m.id,
+            'fecha': m.fecha.isoformat(),
+            'monto': float(m.monto),
+            'referencia': m.referencia,
+            'descripcion': m.descripcion,
+        }
+    return {
+        'id': f.id,
+        'folio': f.folio,
+        'fecha': f.fecha.isoformat(),
+        'cliente': f.cliente,
+        'concepto': f.concepto,
+        'total': float(f.total),
+        'estatus': f.estatus,
+        'estatus_display': f.get_estatus_display(),
+        'confianza_coincidencia': f.confianza_coincidencia,
+        'pago': pago,
+    }
+
+
+@csrf_exempt
+def facturas_html(request):
+    html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'facturas.html')
+    with open(html_path, 'r', encoding='utf-8') as fh:
+        return HttpResponse(fh.read(), content_type='text/html')
+
+
+@csrf_exempt
+def upload_facturas(request):
+    """POST multipart con `file` Excel. Persiste solo facturas nuevas y, si
+    está configurado, las sincroniza a Google Sheets."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+
+    upload = request.FILES.get('file')
+    if not upload:
+        return JsonResponse({'error': 'Falta el archivo `file`'}, status=400)
+
+    try:
+        registros = excel_parser.parse_facturas(upload)
+    except Exception as e:
+        return JsonResponse({'error': f'No se pudo leer el Excel: {e}'}, status=400)
+
+    nuevas = []
+    duplicadas = 0
+    for r in registros:
+        existe = Factura.objects.filter(folio=r['folio'], fecha=r['fecha']).exists()
+        if existe:
+            duplicadas += 1
+            continue
+        try:
+            with transaction.atomic():
+                f = Factura.objects.create(
+                    folio=r['folio'],
+                    fecha=r['fecha'],
+                    cliente=r['cliente'],
+                    concepto=r['concepto'],
+                    total=r['total'],
+                    fila_origen=r['fila_origen'],
+                )
+            nuevas.append(f)
+        except IntegrityError:
+            duplicadas += 1
+
+    sheets_resumen = None
+    sheets_error = None
+    if nuevas and os.getenv('FACTURACION_SHEET_ID'):
+        try:
+            sheets_resumen = sheets_sync.sync_facturas_a_sheets(
+                [_factura_to_dict(f) for f in nuevas]
+            )
+        except Exception as e:
+            logger.error("Sheets sync falló: %s", e)
+            sheets_error = str(e)
+
+    return JsonResponse({
+        'status': 'ok',
+        'leidas': len(registros),
+        'nuevas': len(nuevas),
+        'duplicadas': duplicadas,
+        'sheets': sheets_resumen,
+        'sheets_error': sheets_error,
+        'facturas': [_factura_to_dict(f) for f in nuevas],
+    })
+
+
+@csrf_exempt
+def upload_movimientos(request):
+    """POST multipart con `file` Excel de movimientos bancarios. Guarda los
+    movimientos nuevos y ejecuta conciliación contra todas las facturas
+    pendientes/coincidencia."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+
+    upload = request.FILES.get('file')
+    if not upload:
+        return JsonResponse({'error': 'Falta el archivo `file`'}, status=400)
+
+    try:
+        registros = excel_parser.parse_movimientos(upload)
+    except Exception as e:
+        return JsonResponse({'error': f'No se pudo leer el Excel: {e}'}, status=400)
+
+    movs_nuevos = []
+    duplicados = 0
+    for r in registros:
+        try:
+            with transaction.atomic():
+                m = MovimientoBanco.objects.create(
+                    fecha=r['fecha'],
+                    descripcion=r['descripcion'],
+                    referencia=r['referencia'],
+                    monto=r['monto'],
+                    tipo=r['tipo'],
+                    fila_origen=r['fila_origen'],
+                )
+            movs_nuevos.append(m)
+        except IntegrityError:
+            duplicados += 1
+
+    # Reconciliar todas las facturas no pagadas + las marcadas por coincidencia
+    facturas = list(
+        Factura.objects.filter(estatus__in=['pendiente', 'coincidencia'])
+    )
+    movimientos = list(MovimientoBanco.objects.all())
+    resumen = reconciliation.conciliar(facturas, movimientos)
+
+    cambios = 0
+    actualizadas = []
+    with transaction.atomic():
+        for f in facturas:
+            f.save(update_fields=[
+                'estatus', 'movimiento_pago', 'confianza_coincidencia',
+                'actualizado_en',
+            ])
+            cambios += 1
+            actualizadas.append(_factura_to_dict(f))
+
+    sheets_resumen = None
+    sheets_error = None
+    if cambios and os.getenv('FACTURACION_SHEET_ID'):
+        try:
+            sheets_resumen = sheets_sync.sync_facturas_a_sheets(actualizadas)
+        except Exception as e:
+            logger.error("Sheets sync (movs) falló: %s", e)
+            sheets_error = str(e)
+
+    return JsonResponse({
+        'status': 'ok',
+        'movimientos_leidos': len(registros),
+        'movimientos_nuevos': len(movs_nuevos),
+        'movimientos_duplicados': duplicados,
+        'conciliacion': resumen,
+        'sheets': sheets_resumen,
+        'sheets_error': sheets_error,
+    })
+
+
+@csrf_exempt
+def facturas_list(request):
+    """GET: lista facturas con su estado de conciliación."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+    auth_error = _check_facturas_auth(request)
+    if auth_error:
+        return auth_error
+
+    estatus = request.GET.get('estatus')
+    qs = Factura.objects.select_related('movimiento_pago').all()
+    if estatus:
+        qs = qs.filter(estatus=estatus)
+    limit = int(request.GET.get('limit', 100))
+    offset = int(request.GET.get('offset', 0))
+    total = qs.count()
+    items = [_factura_to_dict(f) for f in qs[offset:offset + limit]]
+    return JsonResponse({'count': total, 'facturas': items})

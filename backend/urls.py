@@ -7,6 +7,7 @@ from api.views import (
     health_check, recibir_webhook, recibir_ads_report,
     ads_analyst_html, ads_analyst_chat,
     ads_snapshots_list_create, ads_snapshot_detail, ads_snapshot_compare,
+    facturas_html, upload_facturas, upload_movimientos, facturas_list,
 )
 
 
@@ -16,6 +17,10 @@ urlpatterns = [
     path('ads-analyst/api/snapshots', ads_snapshots_list_create),
     path('ads-analyst/api/chat', ads_analyst_chat),
     path('ads-analyst', ads_analyst_html),
+    path('facturas/api/upload', upload_facturas),
+    path('facturas/api/movimientos', upload_movimientos),
+    path('facturas/api/list', facturas_list),
+    path('facturas', facturas_html),
     path('', health_check),
     path('admin/', admin.site.urls),
     path("graphql/", csrf_exempt(GraphQLView.as_view(schema=schema))),
