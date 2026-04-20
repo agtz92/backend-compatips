@@ -20,7 +20,7 @@ SCOPES = [
 
 HEADERS = ['Folio', 'Fecha', 'Cliente', 'Concepto', 'Total', 'Estatus',
            'Pago: Fecha', 'Pago: Monto', 'Pago: Referencia',
-           'Confianza coincidencia']
+           'Confianza', 'Nota']
 
 
 MONTH_NAMES_ES = {
@@ -28,6 +28,19 @@ MONTH_NAMES_ES = {
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre',
     11: 'Noviembre', 12: 'Diciembre',
 }
+
+
+def _sheet_id_for_empresa(empresa=''):
+    """Resuelve el spreadsheet_id para una empresa dada.
+
+    Busca FACTURACION_SHEET_ID_{EMPRESA} primero; cae en FACTURACION_SHEET_ID.
+    """
+    if empresa:
+        slug = empresa.upper().replace('-', '_').replace(' ', '_')
+        sid = os.getenv(f'FACTURACION_SHEET_ID_{slug}', '')
+        if sid:
+            return sid
+    return os.getenv('FACTURACION_SHEET_ID', '')
 
 
 def _get_client():
@@ -76,6 +89,16 @@ def _row_for(factura):
     `factura` puede ser un dict del parser o un Factura ORM serializado.
     """
     pago = factura.get('pago') or {}
+    estatus = factura.get('estatus', 'pendiente')
+    if estatus == 'pagada':
+        estatus_label = '✓ Pagada'
+        nota = ''
+    elif estatus == 'coincidencia':
+        estatus_label = '⚠ Por coincidencia'
+        nota = 'Coincidencia por monto — sin referencia identificada. Verificar manualmente.'
+    else:
+        estatus_label = 'Pendiente'
+        nota = ''
     return [
         factura['folio'],
         factura['fecha'].isoformat() if isinstance(factura['fecha'], date)
@@ -83,26 +106,29 @@ def _row_for(factura):
         factura.get('cliente', ''),
         factura.get('concepto', ''),
         float(factura['total']),
-        factura.get('estatus', 'pendiente'),
+        estatus_label,
         pago.get('fecha', ''),
         pago.get('monto', ''),
         pago.get('referencia', ''),
         factura.get('confianza_coincidencia', '') or '',
+        nota,
     ]
 
 
-def sync_facturas_a_sheets(facturas, spreadsheet_id=None):
+def sync_facturas_a_sheets(facturas, spreadsheet_id=None, empresa=''):
     """Agrega facturas nuevas a Google Sheets agrupadas por mes.
 
     facturas: iterable de dicts con folio/fecha/cliente/concepto/total y
         opcionalmente estatus/pago/confianza_coincidencia.
-    spreadsheet_id: opcional. Si no se da, usa env FACTURACION_SHEET_ID.
+    spreadsheet_id: opcional. Si no se da, resuelve por empresa o usa
+        env FACTURACION_SHEET_ID.
+    empresa: slug de empresa para resolver el sheet_id (ej: 'hpkabr').
 
     Retorna {tab_name: cantidad_agregada}.
     """
-    spreadsheet_id = spreadsheet_id or os.getenv('FACTURACION_SHEET_ID', '')
+    spreadsheet_id = spreadsheet_id or _sheet_id_for_empresa(empresa)
     if not spreadsheet_id:
-        raise RuntimeError('FACTURACION_SHEET_ID no está configurado.')
+        raise RuntimeError('No hay FACTURACION_SHEET_ID configurado para esta empresa.')
 
     client = _get_client()
     ss = client.open_by_key(spreadsheet_id)

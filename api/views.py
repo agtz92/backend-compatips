@@ -456,6 +456,7 @@ def _factura_to_dict(f):
         'id': f.id,
         'folio': f.folio,
         'fecha': f.fecha.isoformat(),
+        'empresa': f.empresa,
         'cliente': f.cliente,
         'concepto': f.concepto,
         'total': float(f.total),
@@ -487,6 +488,8 @@ def upload_facturas(request):
     if not upload:
         return JsonResponse({'error': 'Falta el archivo `file`'}, status=400)
 
+    empresa = request.POST.get('empresa', '').strip()
+
     try:
         registros = excel_parser.parse_facturas(upload)
     except Exception as e:
@@ -495,7 +498,7 @@ def upload_facturas(request):
     nuevas = []
     duplicadas = 0
     for r in registros:
-        existe = Factura.objects.filter(folio=r['folio'], fecha=r['fecha']).exists()
+        existe = Factura.objects.filter(folio=r['folio'], fecha=r['fecha'], empresa=empresa).exists()
         if existe:
             duplicadas += 1
             continue
@@ -504,6 +507,7 @@ def upload_facturas(request):
                 f = Factura.objects.create(
                     folio=r['folio'],
                     fecha=r['fecha'],
+                    empresa=empresa,
                     cliente=r['cliente'],
                     concepto=r['concepto'],
                     total=r['total'],
@@ -515,10 +519,11 @@ def upload_facturas(request):
 
     sheets_resumen = None
     sheets_error = None
-    if nuevas and os.getenv('FACTURACION_SHEET_ID'):
+    if nuevas and (os.getenv('FACTURACION_SHEET_ID') or empresa):
         try:
             sheets_resumen = sheets_sync.sync_facturas_a_sheets(
-                [_factura_to_dict(f) for f in nuevas]
+                [_factura_to_dict(f) for f in nuevas],
+                empresa=empresa,
             )
         except Exception as e:
             logger.error("Sheets sync falló: %s", e)
@@ -550,6 +555,8 @@ def upload_movimientos(request):
     if not upload:
         return JsonResponse({'error': 'Falta el archivo `file`'}, status=400)
 
+    empresa = request.POST.get('empresa', '').strip()
+
     nombre = (upload.name or '').lower()
     es_texto = nombre.endswith('.txt') or nombre.endswith('.csv') or nombre.endswith('.tsv')
     try:
@@ -567,6 +574,7 @@ def upload_movimientos(request):
             with transaction.atomic():
                 m = MovimientoBanco.objects.create(
                     fecha=r['fecha'],
+                    empresa=empresa,
                     descripcion=r['descripcion'],
                     referencia=r['referencia'],
                     monto=r['monto'],
@@ -577,11 +585,11 @@ def upload_movimientos(request):
         except IntegrityError:
             duplicados += 1
 
-    # Reconciliar todas las facturas no pagadas + las marcadas por coincidencia
+    # Reconciliar solo dentro de la misma empresa
     facturas = list(
-        Factura.objects.filter(estatus__in=['pendiente', 'coincidencia'])
+        Factura.objects.filter(estatus__in=['pendiente', 'coincidencia'], empresa=empresa)
     )
-    movimientos = list(MovimientoBanco.objects.all())
+    movimientos = list(MovimientoBanco.objects.filter(empresa=empresa))
     resumen = reconciliation.conciliar(facturas, movimientos)
 
     cambios = 0
@@ -597,9 +605,9 @@ def upload_movimientos(request):
 
     sheets_resumen = None
     sheets_error = None
-    if cambios and os.getenv('FACTURACION_SHEET_ID'):
+    if cambios and (os.getenv('FACTURACION_SHEET_ID') or empresa):
         try:
-            sheets_resumen = sheets_sync.sync_facturas_a_sheets(actualizadas)
+            sheets_resumen = sheets_sync.sync_facturas_a_sheets(actualizadas, empresa=empresa)
         except Exception as e:
             logger.error("Sheets sync (movs) falló: %s", e)
             sheets_error = str(e)
@@ -625,9 +633,12 @@ def facturas_list(request):
         return auth_error
 
     estatus = request.GET.get('estatus')
+    empresa = request.GET.get('empresa', '')
     qs = Factura.objects.select_related('movimiento_pago').all()
     if estatus:
         qs = qs.filter(estatus=estatus)
+    if empresa:
+        qs = qs.filter(empresa=empresa)
     limit = int(request.GET.get('limit', 100))
     offset = int(request.GET.get('offset', 0))
     total = qs.count()

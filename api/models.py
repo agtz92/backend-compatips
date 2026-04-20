@@ -35,6 +35,7 @@ class Factura(models.Model):
 
     folio = models.CharField(max_length=100, db_index=True)
     fecha = models.DateField(db_index=True)
+    empresa = models.CharField(max_length=100, blank=True, default='', db_index=True)
     cliente = models.CharField(max_length=255, blank=True, default='')
     concepto = models.TextField(blank=True, default='')
     total = models.DecimalField(max_digits=14, decimal_places=2)
@@ -55,7 +56,7 @@ class Factura(models.Model):
     class Meta:
         ordering = ['-fecha', '-creado_en']
         constraints = [
-            models.UniqueConstraint(fields=['folio', 'fecha'], name='unique_factura_folio_fecha'),
+            models.UniqueConstraint(fields=['folio', 'fecha', 'empresa'], name='unique_factura_folio_fecha_empresa'),
         ]
         indexes = [
             models.Index(fields=['fecha', 'estatus']),
@@ -67,6 +68,7 @@ class Factura(models.Model):
 
 class MovimientoBanco(models.Model):
     fecha = models.DateField(db_index=True)
+    empresa = models.CharField(max_length=100, blank=True, default='', db_index=True)
     descripcion = models.TextField(blank=True, default='')
     referencia = models.CharField(max_length=255, blank=True, default='', db_index=True)
     monto = models.DecimalField(max_digits=14, decimal_places=2)
@@ -79,8 +81,8 @@ class MovimientoBanco(models.Model):
         ordering = ['-fecha', '-creado_en']
         constraints = [
             models.UniqueConstraint(
-                fields=['fecha', 'monto', 'referencia', 'descripcion'],
-                name='unique_movimiento',
+                fields=['fecha', 'monto', 'referencia', 'descripcion', 'empresa'],
+                name='unique_movimiento_empresa',
             ),
         ]
         indexes = [
