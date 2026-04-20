@@ -13,11 +13,11 @@ from openpyxl import load_workbook
 
 # Mapeo de campo lógico -> palabras clave (se buscan dentro del header)
 FACTURA_HEADERS = {
-    'folio': ['folio', 'no factura', 'numero factura', 'num factura', 'invoice', 'uuid', 'serie folio'],
-    'fecha': ['fecha emision', 'fecha factura', 'fecha de emision', 'fecha'],
-    'cliente': ['cliente', 'razon social', 'receptor', 'nombre cliente'],
+    'folio': ['folio', 'no factura', 'numero factura', 'num factura', 'invoice', 'uuid', 'serie folio', 'clave'],
+    'fecha': ['fecha emision', 'fecha factura', 'fecha de emision', 'fecha de elaboracion', 'fecha'],
+    'cliente': ['razon social', 'receptor', 'nombre cliente', 'nombre', 'cliente'],
     'concepto': ['concepto', 'descripcion', 'detalle'],
-    'total': ['total', 'monto total', 'importe total', 'gran total'],
+    'total': ['importe total', 'monto total', 'gran total', 'total'],
 }
 
 MOVIMIENTO_HEADERS = {
@@ -41,11 +41,11 @@ def _normalize(text):
 
 
 def _match_header(cell_value, keywords):
-    """¿El header normalizado contiene alguna keyword?"""
+    """¿El header normalizado contiene alguna keyword (word-boundary match)?"""
     norm = _normalize(cell_value)
     if not norm:
         return False
-    return any(kw in norm for kw in keywords)
+    return any(re.search(r'\b' + re.escape(kw) + r'\b', norm) for kw in keywords)
 
 
 def _find_header_row(ws, header_specs, max_rows=15):
