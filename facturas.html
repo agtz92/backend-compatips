@@ -67,6 +67,10 @@
     <section class="card">
       <h2>2. Subir movimientos bancarios (Excel o TXT)</h2>
       <p>Acepta .xlsx del banco o export TSV/.txt con columnas Día, Concepto / Referencia, cargo, Abono, Saldo. Solo se consideran abonos. Exacto = pagada, similar = "por coincidencia".</p>
+      <p style="font-size:12px;color:#6b7280;margin:0 0 12px;line-height:1.5;">
+        <strong>Margen de días considerados:</strong> match exacto (folio/cliente identificado) ±3 días previos hasta 28 días posteriores; coincidencia por monto ±7 días.<br>
+        <strong>Margen en dinero:</strong> diferencia máxima de $0.01 entre el abono y el total de la factura.
+      </p>
       <input id="movs-file" type="file" accept=".xlsx,.xls,.txt,.csv,.tsv">
       <input id="cuenta" type="text" class="empresa-input" placeholder="Cuenta bancaria (ej: 8059)" autocomplete="off">
       <button id="btn-movs">Subir movimientos &amp; conciliar</button>
