@@ -69,6 +69,7 @@ class Factura(models.Model):
 class MovimientoBanco(models.Model):
     fecha = models.DateField(db_index=True)
     empresa = models.CharField(max_length=100, blank=True, default='', db_index=True)
+    cuenta = models.CharField(max_length=100, blank=True, default='', db_index=True)
     descripcion = models.TextField(blank=True, default='')
     referencia = models.CharField(max_length=255, blank=True, default='', db_index=True)
     monto = models.DecimalField(max_digits=14, decimal_places=2)
@@ -81,8 +82,8 @@ class MovimientoBanco(models.Model):
         ordering = ['-fecha', '-creado_en']
         constraints = [
             models.UniqueConstraint(
-                fields=['fecha', 'monto', 'referencia', 'descripcion', 'empresa'],
-                name='unique_movimiento_empresa',
+                fields=['fecha', 'monto', 'referencia', 'descripcion', 'empresa', 'cuenta'],
+                name='unique_movimiento_empresa_cuenta',
             ),
         ]
         indexes = [
@@ -125,6 +126,23 @@ class AdsReportSnapshot(models.Model):
         indexes = [
             models.Index(fields=['account', 'report_date']),
         ]
+
+
+class ReglaCuenta(models.Model):
+    empresa = models.CharField(max_length=100, db_index=True)
+    cuenta = models.CharField(max_length=100)
+    prefijos_folio = models.JSONField(default=list)
+    descripcion = models.CharField(max_length=255, blank=True, default='')
+
+    class Meta:
+        ordering = ['empresa', 'cuenta']
+        constraints = [
+            models.UniqueConstraint(fields=['empresa', 'cuenta'],
+                                    name='unique_regla_empresa_cuenta'),
+        ]
+
+    def __str__(self):
+        return f"{self.empresa} / {self.cuenta} → {self.prefijos_folio}"
 
     def __str__(self):
         return f"{self.get_account_display()} — {self.report_date}"

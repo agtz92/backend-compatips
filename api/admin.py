@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Post, ProductoOferta, AdsReportSnapshot, Factura, MovimientoBanco
+from .models import Post, ProductoOferta, AdsReportSnapshot, Factura, MovimientoBanco, ReglaCuenta
 
 admin.site.register(Post)
 @admin.register(ProductoOferta)
@@ -30,7 +30,14 @@ class FacturaAdmin(admin.ModelAdmin):
 
 @admin.register(MovimientoBanco)
 class MovimientoBancoAdmin(admin.ModelAdmin):
-    list_display = ("fecha", "monto", "referencia", "descripcion", "tipo")
-    list_filter = ("fecha", "tipo")
+    list_display = ("fecha", "empresa", "cuenta", "monto", "referencia", "descripcion", "tipo")
+    list_filter = ("empresa", "cuenta", "fecha", "tipo")
     search_fields = ("referencia", "descripcion")
     readonly_fields = ("creado_en",)
+
+
+@admin.register(ReglaCuenta)
+class ReglaCuentaAdmin(admin.ModelAdmin):
+    list_display = ("empresa", "cuenta", "prefijos_folio", "descripcion")
+    list_filter = ("empresa",)
+    search_fields = ("empresa", "cuenta")

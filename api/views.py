@@ -558,6 +558,7 @@ def upload_movimientos(request):
         return JsonResponse({'error': 'Falta el archivo `file`'}, status=400)
 
     empresa = request.POST.get('empresa', '').strip()
+    cuenta = request.POST.get('cuenta', '').strip()
 
     nombre = (upload.name or '').lower()
     es_texto = nombre.endswith('.txt') or nombre.endswith('.csv') or nombre.endswith('.tsv')
@@ -577,6 +578,7 @@ def upload_movimientos(request):
                 m = MovimientoBanco.objects.create(
                     fecha=r['fecha'],
                     empresa=empresa,
+                    cuenta=cuenta,
                     descripcion=r['descripcion'],
                     referencia=r['referencia'],
                     monto=r['monto'],
@@ -587,11 +589,25 @@ def upload_movimientos(request):
         except IntegrityError:
             duplicados += 1
 
-    # Reconciliar solo dentro de la misma empresa
-    facturas = list(
-        Factura.objects.filter(estatus__in=['pendiente', 'coincidencia'], empresa=empresa)
-    )
-    movimientos = list(MovimientoBanco.objects.filter(empresa=empresa))
+    # Filtrar facturas por prefijos de folio si hay regla para esta cuenta
+    from .models import ReglaCuenta
+    from django.db.models import Q
+    facturas_qs = Factura.objects.filter(estatus__in=['pendiente', 'coincidencia'], empresa=empresa)
+    prefijos = []
+    if cuenta:
+        try:
+            regla = ReglaCuenta.objects.get(empresa=empresa, cuenta=cuenta)
+            prefijos = regla.prefijos_folio
+        except ReglaCuenta.DoesNotExist:
+            pass
+    if prefijos:
+        filtro_prefijos = Q()
+        for p in prefijos:
+            filtro_prefijos |= Q(folio__istartswith=p)
+        facturas_qs = facturas_qs.filter(filtro_prefijos)
+
+    facturas = list(facturas_qs)
+    movimientos = list(MovimientoBanco.objects.filter(empresa=empresa, cuenta=cuenta))
     resumen = reconciliation.conciliar(facturas, movimientos)
 
     cambios = 0
@@ -616,6 +632,9 @@ def upload_movimientos(request):
 
     return JsonResponse({
         'status': 'ok',
+        'empresa': empresa,
+        'cuenta': cuenta,
+        'prefijos_aplicados': prefijos,
         'movimientos_leidos': len(registros),
         'movimientos_nuevos': len(movs_nuevos),
         'movimientos_duplicados': duplicados,

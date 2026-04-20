@@ -68,6 +68,7 @@
       <h2>2. Subir movimientos bancarios (Excel o TXT)</h2>
       <p>Acepta .xlsx del banco o export TSV/.txt con columnas Día, Concepto / Referencia, cargo, Abono, Saldo. Solo se consideran abonos. Exacto = pagada, similar = "por coincidencia".</p>
       <input id="movs-file" type="file" accept=".xlsx,.xls,.txt,.csv,.tsv">
+      <input id="cuenta" type="text" class="empresa-input" placeholder="Cuenta bancaria (ej: 8059)" autocomplete="off">
       <button id="btn-movs">Subir movimientos &amp; conciliar</button>
       <div id="r-movs" class="result" hidden></div>
     </section>
@@ -108,7 +109,7 @@ function show(el, text, ok) {
   el.className = 'result ' + (ok ? 'ok' : 'err');
 }
 
-async function uploadFile(url, fileInput, resultEl, btn) {
+async function uploadFile(url, fileInput, resultEl, btn, cuenta = '') {
   if (!fileInput.files[0]) { show(resultEl, 'Selecciona un archivo', false); return; }
   btn.disabled = true;
   const original = btn.textContent;
@@ -118,6 +119,7 @@ async function uploadFile(url, fileInput, resultEl, btn) {
     fd.append('file', fileInput.files[0]);
     const emp = getEmpresa();
     if (emp) fd.append('empresa', emp);
+    if (cuenta) fd.append('cuenta', cuenta);
     const res = await fetch(url, { method: 'POST', headers: authHeaders(), body: fd });
     const data = await res.json();
     show(resultEl, data, res.ok);
@@ -134,7 +136,8 @@ $('#btn-facturas').addEventListener('click', () => {
   uploadFile('/facturas/api/upload', $('#facturas-file'), $('#r-facturas'), $('#btn-facturas'));
 });
 $('#btn-movs').addEventListener('click', () => {
-  uploadFile('/facturas/api/movimientos', $('#movs-file'), $('#r-movs'), $('#btn-movs'));
+  const cuenta = $('#cuenta').value.trim();
+  uploadFile('/facturas/api/movimientos', $('#movs-file'), $('#r-movs'), $('#btn-movs'), cuenta);
 });
 
 async function loadList() {
