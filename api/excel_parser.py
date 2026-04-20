@@ -17,7 +17,7 @@ FACTURA_HEADERS = {
     'fecha': ['fecha emision', 'fecha factura', 'fecha de emision', 'fecha de elaboracion', 'fecha'],
     'cliente': ['razon social', 'receptor', 'nombre cliente', 'nombre', 'cliente'],
     'concepto': ['concepto', 'descripcion', 'detalle'],
-    'total': ['importe total', 'monto total', 'gran total', 'total'],
+    'total': ['importe total', 'monto total', 'gran total', 'total$'],
 }
 
 MOVIMIENTO_HEADERS = {
@@ -41,11 +41,22 @@ def _normalize(text):
 
 
 def _match_header(cell_value, keywords):
-    """¿El header normalizado contiene alguna keyword (word-boundary match)?"""
+    """¿El header normalizado contiene alguna keyword?
+
+    Keywords que terminan en '$' usan ancla de fin (ej: 'total$' no hace
+    match en 'total de comisiones' pero sí en 'importe total').
+    """
     norm = _normalize(cell_value)
     if not norm:
         return False
-    return any(re.search(r'\b' + re.escape(kw) + r'\b', norm) for kw in keywords)
+    for kw in keywords:
+        if kw.endswith('$'):
+            pattern = r'\b' + re.escape(kw[:-1]) + r'$'
+        else:
+            pattern = r'\b' + re.escape(kw) + r'\b'
+        if re.search(pattern, norm):
+            return True
+    return False
 
 
 def _find_header_row(ws, header_specs, max_rows=15):

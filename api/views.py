@@ -496,33 +496,35 @@ def upload_facturas(request):
         return JsonResponse({'error': f'No se pudo leer el Excel: {e}'}, status=400)
 
     nuevas = []
-    duplicadas = 0
+    actualizadas_upload = []
     for r in registros:
-        existe = Factura.objects.filter(folio=r['folio'], fecha=r['fecha'], empresa=empresa).exists()
-        if existe:
-            duplicadas += 1
-            continue
         try:
             with transaction.atomic():
-                f = Factura.objects.create(
+                f, created = Factura.objects.update_or_create(
                     folio=r['folio'],
                     fecha=r['fecha'],
                     empresa=empresa,
-                    cliente=r['cliente'],
-                    concepto=r['concepto'],
-                    total=r['total'],
-                    fila_origen=r['fila_origen'],
+                    defaults={
+                        'cliente': r['cliente'],
+                        'concepto': r['concepto'],
+                        'total': r['total'],
+                        'fila_origen': r['fila_origen'],
+                    },
                 )
-            nuevas.append(f)
+            if created:
+                nuevas.append(f)
+            else:
+                actualizadas_upload.append(f)
         except IntegrityError:
-            duplicadas += 1
+            pass
 
     sheets_resumen = None
     sheets_error = None
-    if nuevas and (os.getenv('FACTURACION_SHEET_ID') or empresa):
+    sync_facturas = nuevas + actualizadas_upload
+    if sync_facturas and (os.getenv('FACTURACION_SHEET_ID') or empresa):
         try:
             sheets_resumen = sheets_sync.sync_facturas_a_sheets(
-                [_factura_to_dict(f) for f in nuevas],
+                [_factura_to_dict(f) for f in sync_facturas],
                 empresa=empresa,
             )
         except Exception as e:
@@ -533,7 +535,7 @@ def upload_facturas(request):
         'status': 'ok',
         'leidas': len(registros),
         'nuevas': len(nuevas),
-        'duplicadas': duplicadas,
+        'actualizadas': len(actualizadas_upload),
         'sheets': sheets_resumen,
         'sheets_error': sheets_error,
         'facturas': [_factura_to_dict(f) for f in nuevas],
