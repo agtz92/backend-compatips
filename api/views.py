@@ -663,11 +663,18 @@ def facturas_list(request):
 
     estatus = request.GET.get('estatus')
     empresa = request.GET.get('empresa', '')
-    qs = Factura.objects.select_related('movimiento_pago').all()
+    mes = request.GET.get('mes', '')  # formato YYYY-MM
+    qs = Factura.objects.select_related('movimiento_pago').order_by('-fecha', '-id')
     if estatus:
         qs = qs.filter(estatus=estatus)
     if empresa:
         qs = qs.filter(empresa=empresa)
+    if mes:
+        try:
+            anio, month = mes.split('-')
+            qs = qs.filter(fecha__year=int(anio), fecha__month=int(month))
+        except ValueError:
+            pass
     limit = int(request.GET.get('limit', 100))
     offset = int(request.GET.get('offset', 0))
     total = qs.count()
