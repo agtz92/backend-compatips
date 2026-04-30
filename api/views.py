@@ -6,7 +6,7 @@ import threading
 from .models import ProductoOferta, AdsReportSnapshot, Factura, MovimientoBanco
 from .webhooks import send_botize_webhook_async
 from . import excel_parser, reconciliation, sheets_sync
-from django.db import IntegrityError, transaction
+from django.utils import timezone
 from datetime import datetime, date
 from decimal import Decimal
 from django.conf import settings
@@ -469,6 +469,21 @@ def _factura_to_dict(f):
     }
 
 
+def _sheets_sync_async(facturas_payload, empresa):
+    """Fire-and-forget sync de facturas a Google Sheets. Loggea resultado o error."""
+    if not facturas_payload:
+        return
+
+    def _run():
+        try:
+            resumen = sheets_sync.sync_facturas_a_sheets(facturas_payload, empresa=empresa)
+            logger.info("Sheets sync OK (empresa=%s): %s", empresa, resumen)
+        except Exception as e:
+            logger.error("Sheets sync (async) falló (empresa=%s): %s", empresa, e)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
 @csrf_exempt
 def facturas_html(request):
     html_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'facturas.html')
@@ -497,45 +512,75 @@ def upload_facturas(request):
     except Exception as e:
         return JsonResponse({'error': f'No se pudo leer el Excel: {e}'}, status=400)
 
-    nuevas = []
+    # Pre-fetch facturas existentes que coinciden con (folio, fecha, empresa)
+    folios = {r['folio'] for r in registros}
+    fechas = {r['fecha'] for r in registros}
+    existentes_map = {}
+    if folios and fechas:
+        for f in Factura.objects.filter(
+            empresa=empresa, folio__in=folios, fecha__in=fechas,
+        ):
+            existentes_map[(f.folio, f.fecha)] = f
+
+    nuevas_objs = []
     actualizadas_upload = []
+    seen_keys = set()
+    for r in registros:
+        key = (r['folio'], r['fecha'])
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        existing = existentes_map.get(key)
+        if existing is not None:
+            existing.cliente = r['cliente']
+            existing.concepto = r['concepto']
+            existing.total = r['total']
+            existing.fila_origen = r['fila_origen']
+            actualizadas_upload.append(existing)
+        else:
+            nuevas_objs.append(Factura(
+                folio=r['folio'],
+                fecha=r['fecha'],
+                empresa=empresa,
+                cliente=r['cliente'],
+                concepto=r['concepto'],
+                total=r['total'],
+                fila_origen=r['fila_origen'],
+            ))
+
     try:
-        for r in registros:
-            try:
-                with transaction.atomic():
-                    f, created = Factura.objects.update_or_create(
-                        folio=r['folio'],
-                        fecha=r['fecha'],
-                        empresa=empresa,
-                        defaults={
-                            'cliente': r['cliente'],
-                            'concepto': r['concepto'],
-                            'total': r['total'],
-                            'fila_origen': r['fila_origen'],
-                        },
-                    )
-                if created:
-                    nuevas.append(f)
-                else:
-                    actualizadas_upload.append(f)
-            except IntegrityError:
-                pass
+        if nuevas_objs:
+            Factura.objects.bulk_create(
+                nuevas_objs, ignore_conflicts=True, batch_size=500,
+            )
+        if actualizadas_upload:
+            Factura.objects.bulk_update(
+                actualizadas_upload,
+                ['cliente', 'concepto', 'total', 'fila_origen'],
+                batch_size=500,
+            )
     except Exception as e:
         logger.error("Error guardando facturas: %s", e)
         return JsonResponse({'error': f'Error guardando facturas: {e}'}, status=500)
 
-    sheets_resumen = None
-    sheets_error = None
+    # Refetch las nuevas para asegurar que tengan PK (bulk_create con
+    # ignore_conflicts no garantiza PKs en todos los casos)
+    nuevas = []
+    if nuevas_objs:
+        nuevas_keys = {(o.folio, o.fecha) for o in nuevas_objs}
+        candidatas = Factura.objects.filter(
+            empresa=empresa,
+            folio__in=[k[0] for k in nuevas_keys],
+            fecha__in=[k[1] for k in nuevas_keys],
+        )
+        nuevas = [f for f in candidatas if (f.folio, f.fecha) in nuevas_keys]
+
     sync_facturas = nuevas + actualizadas_upload
     if sync_facturas and (os.getenv('FACTURACION_SHEET_ID') or empresa):
-        try:
-            sheets_resumen = sheets_sync.sync_facturas_a_sheets(
-                [_factura_to_dict(f) for f in sync_facturas],
-                empresa=empresa,
-            )
-        except Exception as e:
-            logger.error("Sheets sync falló: %s", e)
-            sheets_error = str(e)
+        _sheets_sync_async(
+            [_factura_to_dict(f) for f in sync_facturas],
+            empresa,
+        )
 
     try:
         return JsonResponse({
@@ -543,8 +588,8 @@ def upload_facturas(request):
             'leidas': len(registros),
             'nuevas': len(nuevas),
             'actualizadas': len(actualizadas_upload),
-            'sheets': sheets_resumen,
-            'sheets_error': sheets_error,
+            'sheets': None,
+            'sheets_error': None,
             'facturas': [_factura_to_dict(f) for f in nuevas],
         })
     except Exception as e:
@@ -580,24 +625,45 @@ def upload_movimientos(request):
     except Exception as e:
         return JsonResponse({'error': f'No se pudo leer el archivo: {e}'}, status=400)
 
-    movs_nuevos = []
+    # Pre-fetch movimientos existentes en las fechas del archivo para detectar
+    # duplicados sin pegarle a la DB por cada fila
+    fechas = {r['fecha'] for r in registros}
+    existing_keys = set()
+    if fechas:
+        for fecha_e, monto_e, ref_e, desc_e in MovimientoBanco.objects.filter(
+            empresa=empresa, cuenta=cuenta, fecha__in=fechas,
+        ).values_list('fecha', 'monto', 'referencia', 'descripcion'):
+            existing_keys.add((fecha_e, monto_e, ref_e, desc_e))
+
+    nuevos_objs = []
     duplicados = 0
     for r in registros:
-        try:
-            with transaction.atomic():
-                m = MovimientoBanco.objects.create(
-                    fecha=r['fecha'],
-                    empresa=empresa,
-                    cuenta=cuenta,
-                    descripcion=r['descripcion'],
-                    referencia=r['referencia'],
-                    monto=r['monto'],
-                    tipo=r['tipo'],
-                    fila_origen=r['fila_origen'],
-                )
-            movs_nuevos.append(m)
-        except IntegrityError:
+        key = (r['fecha'], r['monto'], r['referencia'], r['descripcion'])
+        if key in existing_keys:
             duplicados += 1
+            continue
+        existing_keys.add(key)
+        nuevos_objs.append(MovimientoBanco(
+            fecha=r['fecha'],
+            empresa=empresa,
+            cuenta=cuenta,
+            descripcion=r['descripcion'],
+            referencia=r['referencia'],
+            monto=r['monto'],
+            tipo=r['tipo'],
+            fila_origen=r['fila_origen'],
+        ))
+
+    try:
+        if nuevos_objs:
+            MovimientoBanco.objects.bulk_create(
+                nuevos_objs, ignore_conflicts=True, batch_size=500,
+            )
+    except Exception as e:
+        logger.error("Error guardando movimientos: %s", e)
+        return JsonResponse({'error': f'Error guardando movimientos: {e}'}, status=500)
+
+    movs_nuevos_count = len(nuevos_objs)
 
     # Filtrar facturas por prefijos de folio si hay regla para esta cuenta
     from .models import ReglaCuenta
@@ -624,25 +690,24 @@ def upload_movimientos(request):
     movimientos = list(MovimientoBanco.objects.filter(empresa=empresa, cuenta=cuenta))
     resumen = reconciliation.conciliar(facturas, movimientos)
 
-    cambios = 0
     actualizadas = []
-    with transaction.atomic():
+    if facturas:
+        ahora = timezone.now()
         for f in facturas:
-            f.save(update_fields=[
-                'estatus', 'movimiento_pago', 'confianza_coincidencia',
-                'actualizado_en',
-            ])
-            cambios += 1
-            actualizadas.append(_factura_to_dict(f))
-
-    sheets_resumen = None
-    sheets_error = None
-    if cambios and (os.getenv('FACTURACION_SHEET_ID') or empresa):
+            f.actualizado_en = ahora
         try:
-            sheets_resumen = sheets_sync.sync_facturas_a_sheets(actualizadas, empresa=empresa)
+            Factura.objects.bulk_update(
+                facturas,
+                ['estatus', 'movimiento_pago', 'confianza_coincidencia', 'actualizado_en'],
+                batch_size=500,
+            )
         except Exception as e:
-            logger.error("Sheets sync (movs) falló: %s", e)
-            sheets_error = str(e)
+            logger.error("Error actualizando facturas tras conciliación: %s", e)
+            return JsonResponse({'error': f'Error actualizando facturas: {e}'}, status=500)
+        actualizadas = [_factura_to_dict(f) for f in facturas]
+
+    if actualizadas and (os.getenv('FACTURACION_SHEET_ID') or empresa):
+        _sheets_sync_async(actualizadas, empresa)
 
     return JsonResponse({
         'status': 'ok',
@@ -650,11 +715,11 @@ def upload_movimientos(request):
         'cuenta': cuenta,
         'prefijos_aplicados': prefijos,
         'movimientos_leidos': len(registros),
-        'movimientos_nuevos': len(movs_nuevos),
+        'movimientos_nuevos': movs_nuevos_count,
         'movimientos_duplicados': duplicados,
         'conciliacion': resumen,
-        'sheets': sheets_resumen,
-        'sheets_error': sheets_error,
+        'sheets': None,
+        'sheets_error': None,
     })
 
 
