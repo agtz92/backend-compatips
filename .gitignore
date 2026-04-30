@@ -6,3 +6,4 @@ dist/
 build/
 .env
 db.sqlite3
+.claude/
